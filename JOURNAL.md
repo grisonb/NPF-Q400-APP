@@ -22,7 +22,32 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
   rapport de démarrage ajoute le texte « Survolée » de la PWA.
 - Essais PC : 21 contrôles sur 21 OK (rapport : « Survolée: GPS en attente », normal sur PC
   sans position).
-- Le push du journal `f3fd601` a relancé les deux recettes GitHub ; résultat dans l'entrée suivante.
+- Le push du journal `f3fd601` a relancé les deux recettes : fabrication verte (run 43939422912),
+  essai simulateur vert (run 43939418730, ≈ 15 min).
+
+### Premier essai de la 0.3 (commit `e1a89a4`, poussé après « OK push »)
+- Fabrication sans signature : **verte**, run 43940213649 (≈ 2 min).
+- Essai simulateur : **vert**, run 43940213791 (≈ 18 min), iPad (9th generation), iOS 26.5.
+  Plus d'alerte iOS sur le texte de position ; plus d'écran blanc à 10 s (écran noir de
+  lancement à 10 s, carte à 25 s) ; aucune erreur JS ; écran allumé OK.
+- **Problème découvert** : iOS accorde bien la position à l'app, mais le moteur web (WKWebView)
+  affiche EN PLUS sa propre question « « localhost » aimerait utiliser votre position
+  actuelle » (capture portrait 40 s). Tant qu'on ne touche pas « Autoriser », la PWA reste sur
+  « GPS en attente ». Apple ne fournit aucun moyen public de l'accorder d'office, et la
+  question revient à chaque lancement de l'app.
+
+### Correction (même version 0.3, nouveau commit)
+- Plugin `@capacitor/geolocation` 8.2.4 (position native iOS).
+- Couche app, section 7 : dans l'app seulement, `navigator.geolocation` est remplacé par un
+  équivalent (getCurrentPosition, watchPosition, clearWatch ; même format de position et
+  d'erreur qu'un navigateur) qui lit la position par le plugin. Une seule autorisation : celle
+  d'iOS. Les appels de la PWA (démarrage, suivi GPS, centrage…) ne changent pas.
+- Rapport de démarrage : état du GPS, nombre de positions reçues, dernière erreur.
+- Essais PC : 23 contrôles sur 23 OK. Navigateur normal : GPS du navigateur intact (comme
+  TEST). Mode app simulé (position fixe Marignane) : position ponctuelle reçue, suivi reçu,
+  plus rien après l'arrêt du suivi ; la PWA passe de « GPS en attente » à « Survolée :
+  indisponible » (position reçue ; commune non trouvée sur PC, Internet coupé).
+- **non vérifié** : GPS réel sur iPad ; position en arrière-plan (pas demandée).
 
 ---
 

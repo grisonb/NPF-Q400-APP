@@ -158,6 +158,25 @@
                     } catch (x) { info.keepAwakeErreur = String(x && x.message || x); }
                 }
 
+                step('gps');
+                /* GPS */
+                info.geolocNatifNavigateur = Object.prototype.toString.call(navigator.geolocation) === '[object Geolocation]';
+                info.survolee = ((document.getElementById('nearest-commune-display') || {}).textContent || '').trim().slice(0, 80);
+                if (window.NPF_Q400_APP) {
+                    try {
+                        var one = await new Promise(function (ok, ko) {
+                            navigator.geolocation.getCurrentPosition(ok, ko, { enableHighAccuracy: true, timeout: 5000 });
+                        });
+                        info.gpsPonctuel = [one.coords.latitude, one.coords.longitude];
+                        var got = 0;
+                        var wid = navigator.geolocation.watchPosition(function () { got += 1; }, function () {}, { enableHighAccuracy: true });
+                        await sleep(2500);
+                        navigator.geolocation.clearWatch(wid);
+                        var after = got;
+                        await sleep(1500);
+                        info.gpsSuivi = { recues: after, apresArret: got - after };
+                    } catch (x) { info.gpsErreur = String(x && x.message || x); }
+                }
                 step('pdf');
                 /* PDF */
                 info.pdfVac = await testPdf('vac');

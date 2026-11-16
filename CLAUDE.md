@@ -54,7 +54,11 @@ npm run test:web          # essais Chrome sur PC
   (`'serviceWorker' in navigator` devient faux), la PWA ne l'enregistre donc pas.
 - La carte hors ligne est lue directement dans IndexedDB.
 - Plugins Capacitor appelés sans bundler : `Capacitor.nativePromise('<jsName>', '<méthode>', {})`
-  (pont natif iOS). Plugin installé : `@capacitor-community/keep-awake` 8.0.1 (jsName `KeepAwake`).
+  (pont natif iOS). Plugins installés : `@capacitor-community/keep-awake` 8.0.1 (jsName `KeepAwake`),
+  `@capacitor/geolocation` 8.2.4 (jsName `Geolocation`, `watchPosition` par `nativeCallback`).
+- GPS : dans WKWebView, `navigator.geolocation` déclenche une 2e question « localhost » à chaque
+  lancement (aucune API Apple publique pour l'accorder) → dans l'app, la couche app le remplace
+  par le plugin natif. `NSLocationWhenInUseUsageDescription` est dans `Info.plist`.
 - PDF de la PWA : `window.open('', '_blank')` puis `.location.href = blob:` ; la couche app
   rend une fenêtre factice et ouvre `ouvrirNpfVisionneusePdf(titre, blob)` (src/218).
 - TEST v17.97 n'a plus de bouton `#force-update-button` dans la page ; la pérenne a

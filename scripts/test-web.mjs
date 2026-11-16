@@ -104,6 +104,7 @@ const checks = [
     ['B : bouton MAJ visible et actif comme A', b.boutonMajVisible === true && b.boutonMajClicAgit === true && a.boutonMajVisible === true && a.boutonMajClicAgit === true],
     ['B : Wake Lock du navigateur intact comme A', b.wakeLockNatifNavigateur === a.wakeLockNatifNavigateur],
     ['B : PDF VAC et terrain ouverts dans un nouvel onglet comme A (pas la visionneuse)', same(a.pdfVac, b.pdfVac) && same(a.pdfTerrain, b.pdfTerrain) && b.pdfVac.nouvelOnglet === true && b.pdfVac.visionneuse === false && b.pdfTerrain.nouvelOnglet === true && b.pdfTerrain.visionneuse === false],
+    ['B : GPS du navigateur intact comme A', b.geolocNatifNavigateur === true && a.geolocNatifNavigateur === true],
     ['B : mêmes serveurs extérieurs tentés que A', same(a.externalHostsTried, b.externalHostsTried)],
     // C = page de l'app en mode app simulé
     ['C : couche app active, version ' + appVersion, !!c.npfQ400App && c.htmlClassApp && c.npfQ400App.layerVersion === appVersion],
@@ -115,6 +116,7 @@ const checks = [
     ['C : écran allumé : demande -> keepAwake, relâche -> allowSleep', /^keepAwake \/ écran allumé$/.test(c.keepAwakeApresDemande || '') && /^allowSleep \/ veille permise$/.test(c.keepAwakeApresRelache || '') && c.keepAwakeSentinelleRelachee === true],
     ['C : VAC ouverte dans la visionneuse interne (titre, page dessinée, pas d\'onglet)', c.pdfVac.visionneuse === true && c.pdfVac.titre === 'VAC LFZZ' && c.pdfVac.pagesDessinees >= 1 && c.pdfVac.nouvelOnglet === false],
     ['C : PDF terrain ouvert dans la visionneuse interne (titre, page dessinée, pas d\'onglet)', c.pdfTerrain.visionneuse === true && c.pdfTerrain.titre === 'PDF LFZY' && c.pdfTerrain.pagesDessinees >= 1 && c.pdfTerrain.nouvelOnglet === false],
+    ['C : GPS par le plugin (position ponctuelle, suivi, arrêt du suivi)', same(c.gpsPonctuel, [43.4367, 5.215]) && c.gpsSuivi && c.gpsSuivi.recues >= 2 && c.gpsSuivi.apresArret === 0 && c.npfQ400AppFin.gpsErreurs === 0],
     ['C : rapport de démarrage écrit', !!(c.npfQ400AppFin && c.npfQ400AppFin.startupReport && c.npfQ400AppFin.startupReport.carte === true)]
 ];
 let ok = true;

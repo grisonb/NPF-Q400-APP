@@ -18,6 +18,8 @@
  *        6. PDF (VAC, PDF terrains, Doc PDF Réduite, Carte Fréquences OPS) : au lieu
  *           d'un nouvel onglet (window.open), ouverture dans la visionneuse PDF.js
  *           interne de la PWA (ouvrirNpfVisionneusePdf, src/218).
+ *   0.3  7. GPS : navigator.geolocation passe par le plugin natif @capacitor/geolocation
+ *           (une seule autorisation, celle d'iOS ; pas de seconde question « localhost »).
  * Pas encore : trace en arrière-plan, téléchargements/partage, Chat, réglages NAS/VPS.
  */
 (function npfQ400AppLayer() {
@@ -132,6 +134,9 @@
                     fondBarreHaut: rect('#npf-fond-barre-haut'),
                     versionAffichee: (document.getElementById('app-version-display') || {}).textContent || '',
                     survolee: ((document.getElementById('nearest-commune-display') || {}).textContent || '').trim().slice(0, 80),
+                    gps: state.gps,
+                    gpsPositions: state.gpsPositions,
+                    gpsErreur: state.gpsDerniereErreur,
                     keepAwake: state.keepAwake,
                     keepAwakeDemandes: state.keepAwakeRequests,
                     erreursJs: state.jsErrors.slice()
@@ -315,6 +320,140 @@
             state.keepAwake = 'remplacement impossible';
         }
         state.keepAwakeActiveCount = function () { return active.length; };
+    })();
+
+    /* ---------------------------------------------------------------- 7. GPS (0.3) */
+    /*
+     * Dans l'app, le GPS du moteur web (WKWebView) pose une seconde question
+     * « localhost aimerait utiliser votre position » à chaque lancement, en plus de
+     * l'autorisation d'iOS ; Apple ne permet pas de l'accorder d'office. Dans l'app
+     * seulement, navigator.geolocation est donc remplacé par un équivalent qui lit la
+     * position par le plugin natif @capacitor/geolocation (une seule autorisation,
+     * celle d'iOS). Mêmes fonctions et même format qu'un navigateur :
+     * getCurrentPosition, watchPosition, clearWatch.
+     */
+    state.gps = 'non installé';
+    state.gpsPositions = 0;
+    state.gpsErreurs = 0;
+    state.gpsDerniereErreur = '';
+    (function installGeolocation() {
+        var cap = window.Capacitor;
+        var native = null;
+        if (cap && typeof cap.nativePromise === 'function' && typeof cap.nativeCallback === 'function') {
+            native = {
+                once: function (o) { return cap.nativePromise('Geolocation', 'getCurrentPosition', o); },
+                watch: function (o, cb) { return cap.nativeCallback('Geolocation', 'watchPosition', o, cb); },
+                clear: function (id) { return cap.nativePromise('Geolocation', 'clearWatch', { id: id }); }
+            };
+        } else if (detectedBy === 'simulation-pc') {
+            /* Essais PC : position fixe (Marignane) au lieu du plugin natif. */
+            var simPosition = function () {
+                return { timestamp: Date.now(), coords: { latitude: 43.4367, longitude: 5.2150, accuracy: 5,
+                    altitude: 30, altitudeAccuracy: 5, heading: null, speed: 0 } };
+            };
+            var simTimers = {};
+            var simNext = 1;
+            native = {
+                once: function () { return Promise.resolve(simPosition()); },
+                watch: function (o, cb) {
+                    var id = 'sim-' + (simNext++);
+                    setTimeout(function () { cb(simPosition()); }, 0);
+                    simTimers[id] = setInterval(function () { cb(simPosition()); }, 1000);
+                    return id;
+                },
+                clear: function (id) { clearInterval(simTimers[id]); delete simTimers[id]; return Promise.resolve(); }
+            };
+        }
+        if (!native) {
+            state.gps = 'indisponible (pont natif absent)';
+            return;
+        }
+
+        function num(v) {
+            return (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? null : Number(v);
+        }
+        function toPosition(data) {
+            var c = (data && data.coords) || {};
+            return {
+                timestamp: num(data && data.timestamp) || Date.now(),
+                coords: {
+                    latitude: Number(c.latitude),
+                    longitude: Number(c.longitude),
+                    accuracy: num(c.accuracy),
+                    altitude: num(c.altitude),
+                    altitudeAccuracy: num(c.altitudeAccuracy),
+                    heading: num(c.heading),
+                    speed: num(c.speed)
+                }
+            };
+        }
+        function toError(err) {
+            var code = String((err && err.code) || '');
+            var message = String((err && err.message) || err || 'position indisponible');
+            var c = 2; /* POSITION_UNAVAILABLE */
+            if (/(0003|0007|0008)$/.test(code) || /denied|restricted|not enabled/i.test(message)) c = 1;
+            else if (/0010$/.test(code) || /time/i.test(message)) c = 3;
+            state.gpsErreurs += 1;
+            state.gpsDerniereErreur = message.slice(0, 120);
+            return { code: c, message: message, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 };
+        }
+        function toOptions(o) {
+            o = o || {};
+            var r = { enableHighAccuracy: !!o.enableHighAccuracy };
+            if (isFinite(Number(o.timeout))) r.timeout = Number(o.timeout);
+            if (isFinite(Number(o.maximumAge))) r.maximumAge = Number(o.maximumAge);
+            return r;
+        }
+        /* Une erreur dans le code de la PWA doit rester visible (console, DIAG). */
+        function callSafely(fn, arg) {
+            if (typeof fn !== 'function') return;
+            try { fn(arg); } catch (error) { setTimeout(function () { throw error; }, 0); }
+        }
+        function gotPosition(data) {
+            state.gpsPositions += 1;
+            state.gps = 'position reçue';
+            return toPosition(data);
+        }
+
+        var watches = {};
+        var nextId = 1;
+        var geolocation = {
+            getCurrentPosition: function (success, error, options) {
+                native.once(toOptions(options)).then(function (data) {
+                    callSafely(success, gotPosition(data));
+                }, function (err) {
+                    callSafely(error, toError(err));
+                });
+            },
+            watchPosition: function (success, error, options) {
+                var id = nextId++;
+                watches[id] = native.watch(toOptions(options), function (data, err) {
+                    if (!(id in watches)) return;
+                    if (err || !data) {
+                        callSafely(error, toError(err));
+                        return;
+                    }
+                    callSafely(success, gotPosition(data));
+                });
+                return id;
+            },
+            clearWatch: function (id) {
+                if (!(id in watches)) return;
+                var nativeId = watches[id];
+                delete watches[id];
+                try { Promise.resolve(native.clear(nativeId)).catch(function () {}); } catch (_) {}
+            }
+        };
+        try {
+            Object.defineProperty(navigator, 'geolocation', {
+                configurable: true,
+                enumerable: true,
+                get: function () { return geolocation; }
+            });
+            state.gps = navigator.geolocation === geolocation ? 'prêt' : 'remplacement refusé';
+        } catch (_) {
+            state.gps = 'remplacement impossible';
+        }
     })();
 
     /* ---------------------------------------------------------------- 6. PDF */
