@@ -1,0 +1,66 @@
+# NPF-Q400 APP — essai dans le simulateur iPad (aucun compte Apple, aucune signature, aucun secret).
+# Fabrique l'app pour le simulateur, la lance en paysage puis en portrait, prend des
+# captures d'écran et relève les erreurs JS de la page. Tout est gardé en artefact.
+name: NPF-Q400 APP - essai simulateur iPad
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Commit ou branche du code de l'app à essayer (vide = ce commit)"
+        required: false
+        default: ""
+      label:
+        description: "Étiquette des captures (ex. 0.1) ; vide = version de package.json"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-sim-${{ github.ref }}-${{ inputs.source_ref || 'head' }}
+  cancel-in-progress: false
+
+jobs:
+  simulator-test:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Récupérer la recette d'essai (ce commit)
+        uses: actions/checkout@v7
+        with:
+          path: recette
+
+      - name: Récupérer le code de l'app à essayer
+        uses: actions/checkout@v7
+        with:
+          path: app
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Étiquette
+        id: label
+        run: |
+          L="${{ inputs.label }}"
+          if [ -z "$L" ]; then L=$(node -p "require('./app/package.json').version.replace(/\.0$/, '')"); fi
+          echo "label=$L" >> "$GITHUB_OUTPUT"
+          echo "Étiquette : $L"
+
+      - name: Essai simulateur (paysage et portrait)
+        run: bash recette/scripts/sim-test.sh app "resultats/NPF-Q400-APP-${{ steps.label.outputs.label }}-simulateur" "${{ steps.label.outputs.label }}"
+
+      - name: Garder captures, journaux et bilan (artefact)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: NPF-Q400-APP-${{ steps.label.outputs.label }}-simulateur
+          path: resultats/
+          retention-days: 30
+          if-no-files-found: warn

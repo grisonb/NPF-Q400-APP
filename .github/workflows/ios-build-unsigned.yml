@@ -62,7 +62,10 @@ jobs:
           grep -q "\*\* BUILD SUCCEEDED \*\*" build/xcodebuild.log
 
       - name: Emballer le résultat (.ipa NON signé)
+        id: pack
         run: |
+          V=$(node -p "require('./package.json').version.replace(/\.0$/, '')")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
           APP="build/DerivedData/Build/Products/Release-iphoneos/App.app"
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" -c "Print :UIDeviceFamily" "$APP/Info.plist"
@@ -70,15 +73,15 @@ jobs:
           grep -q "app-layer/npf-q400-app.js" "$APP/public/index.html"
           mkdir -p build/out/Payload
           cp -R "$APP" build/out/Payload/
-          (cd build/out && zip -qry NPF-Q400-APP-0.1-non-signe.ipa Payload)
-          du -sh "$APP" build/out/NPF-Q400-APP-0.1-non-signe.ipa
+          (cd build/out && zip -qry "NPF-Q400-APP-$V-non-signe.ipa" Payload)
+          du -sh "$APP" "build/out/NPF-Q400-APP-$V-non-signe.ipa"
 
       - name: Garder le résultat (artefact téléchargeable)
         uses: actions/upload-artifact@v7
         with:
-          name: NPF-Q400-APP-0.1-non-signe
+          name: NPF-Q400-APP-${{ steps.pack.outputs.version }}-non-signe
           path: |
-            build/out/NPF-Q400-APP-0.1-non-signe.ipa
+            build/out/NPF-Q400-APP-${{ steps.pack.outputs.version }}-non-signe.ipa
             build/xcodebuild.log
           retention-days: 30
           if-no-files-found: error

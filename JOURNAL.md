@@ -5,6 +5,65 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 16/11/2026 — v0.2 : essai simulateur iPad + premières adaptations
+
+Base inchangée : NPF-Q400 TEST v17.97 (`web-test/` identique, vérifié par git).
+
+### Adaptations (dans `app-layer/`, actives seulement dans l'app)
+- **Bouton MAJ masqué et désactivé** : CSS `display:none` sur `#force-update-button`,
+  `.force-update-button` (TEST) et `#boot-force-update-button` (pérenne), et tout clic sur
+  eux est arrêté avant la PWA. Constat : TEST v17.97 n'a plus ce bouton dans sa page
+  (retiré par un ancien commit de TEST) ; la règle sert pour la future base pérenne.
+- **Écran allumé** (`@capacitor-community/keep-awake` 8.0.1) : dans l'app,
+  `navigator.wakeLock` est remplacé par un équivalent qui pilote le plugin natif. Les
+  déclencheurs restent ceux de la PWA : démarrage, retour au premier plan, premier geste,
+  téléchargement de carte ; tout est relâché quand l'app passe en arrière-plan.
+- **PDF** (VAC, PDF terrain, Doc PDF Réduite, Carte Fréquences OPS) : dans l'app, la
+  fenêtre `window.open('', '_blank')` est remplacée par une fenêtre factice ; l'adresse du
+  PDF est lue et affichée dans la visionneuse PDF.js interne (`ouvrirNpfVisionneusePdf`,
+  src/218), avec le titre « VAC xxxx » / « PDF xxxx ». Si le fichier n'est pas un PDF ou
+  n'est pas lisible : message « NPF-Q400 APP — ouverture … impossible ».
+- **Icône** = icône du manifest de la PWA (`icons/icon-512x512.png`), agrandie en
+  1024 × 1024 sans transparence (`scripts/make-icon.mjs`). Nom affiché « NPF-Q400 APP »
+  (inchangé depuis la 0.1).
+- **Barres iPadOS** (ajout lié au contrôle « barre du haut et boutons ») : la classe
+  `npf-app-installee` de TEST est posée dans l'app → mêmes marges que la PWA installée
+  (32 px en haut, 20 px en bas). Sans elle, seule la zone sûre annoncée par iOS était
+  réservée.
+- **DIAG** : erreurs JS relevées (`NPF_Q400_APP.jsErrors`) et rapport de démarrage écrit
+  une fois dans la console 20 s après le chargement (taille, orientation, carte, barre,
+  boutons, écran allumé, erreurs). Aucun envoi réseau.
+- Version 0.2 (`MARKETING_VERSION = 0.2`, build 2).
+- Non fait (non demandé) : trace en arrière-plan, téléchargements/partage (DIAG, KML,
+  CSV), Chat, réglages NAS/VPS.
+
+### Recette simulateur (`.github/workflows/ios-simulator-test.yml`, `scripts/sim-test.sh`)
+- Mac `macos-26`, fabrication Debug pour le simulateur, sans signature. En Debug,
+  Capacitor recopie la console et les erreurs JS de la page dans la sortie de l'app.
+- iPad le plus proche de l'iPad 9e génération (ordre de préférence : 9e génération,
+  10e génération, A16, Air 11 pouces…) ; le nom retenu est écrit dans `bilan.txt`.
+- `simctl` ne sait pas tourner le simulateur : pour l'essai, la COPIE installée de l'app
+  n'accepte qu'une orientation (paysage, puis portrait). Captures à 10, 25 et 40 s,
+  détection d'écran blanc/noir, journal de l'app, bilan.
+- Champ `source_ref` pour essayer un ancien commit (sert à refaire les captures de la 0.1).
+
+### Essais PC (`npm run test:web`) — 21 contrôles sur 21 OK
+- Chrome de Windows sans écran, réseau extérieur coupé, fenêtres autorisées
+  (`--disable-popup-blocking`, comme un toucher sur l'iPad ; sans cela la PWA, faute de
+  fenêtre, affiche le PDF à la place de la page — c'était le blocage du premier essai).
+- Navigateur normal : page de l'app identique à TEST v17.97 (service worker, fenêtre de
+  mise à jour, bouton MAJ, Wake Lock du navigateur, PDF en nouvel onglet, barre 0 px,
+  boutons à 46 px du haut, mêmes serveurs tentés) ; aucune erreur JS.
+- Mode app simulé : bouton MAJ masqué et clic bloqué ; demande d'écran allumé → `keepAwake`,
+  relâche → `allowSleep` (plugin simulé sur PC) ; VAC et PDF terrain ouverts dans la
+  visionneuse avec titre et page dessinée, sans onglet ; barre 32 px (boutons à 62 px) ;
+  aucune erreur JS.
+
+### Résultats simulateur 0.1 / 0.2
+- Voir l'entrée suivante (après le push).
+
+---
+
 ## 16/11/2026 — v0.1 : première fabrication GitHub sans signature — VALIDÉ
 
 - Premier push (commit `a628705`) après « OK push ». Avertissement GitHub attendu :

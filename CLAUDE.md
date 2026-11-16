@@ -11,7 +11,10 @@ But final : enregistrer la trace de vol automatiquement en arrière-plan.
 - Identifiant d'app : `com.grisonb.npfq400app` — nom affiché : « NPF-Q400 APP ».
 - iPad uniquement (`TARGETED_DEVICE_FAMILY = 2`), 4 orientations (comme la PWA,
   dont le manifest n'impose aucune orientation).
-- Version de l'app : **0.1** (`MARKETING_VERSION`, `package.json`, `app-layer/`).
+- Version de l'app : **0.2** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
+  `project.pbxproj`, `package.json`, `LAYER_VERSION` dans `app-layer/`).
+- Icône de l'app = icône de la PWA (`icons/icon-512x512.png` du manifest), refaite par
+  `node scripts/make-icon.mjs` (1024 px, sans transparence).
 - Version de NPF-Q400 TEST embarquée : voir `VERSION-BASE`.
 - Dépôt GitHub **public** : `grisonb/NPF-Q400-APP`.
 
@@ -23,12 +26,15 @@ simple**. Si quelque chose n'est pas vérifiable, écrire « non vérifié ».
 | Chemin | Rôle |
 |---|---|
 | `web-test/` | Copie **figée** de NPF-Q400 TEST (fichiers web). **Ne jamais modifier à la main.** Pour changer de version : nouvelle copie complète depuis un commit poussé de TEST + mise à jour de `VERSION-BASE` + entrée dans `JOURNAL.md`. |
-| `app-layer/npf-q400-app.js` | Couche « app » séparée du code TEST. Ne fait rien hors de l'app. |
+| `app-layer/npf-q400-app.js` | Couche « app » séparée du code TEST. Ne fait rien hors de l'app. Dans l'app : service worker masqué, fenêtres de mise à jour et bouton MAJ bloqués, marges des barres iPadOS comme la PWA installée, écran allumé (KeepAwake), PDF dans la visionneuse interne, relevé des erreurs JS et rapport de démarrage dans la console. |
 | `scripts/build-www.mjs` | Fabrique `www/` = `web-test/` + `app-layer/` + une ligne `<script>` ajoutée en tête de `<head>` de `index.html`. |
-| `scripts/test-web.mjs` | Essais sur PC (Chrome sans écran) : mode app simulé et mode navigateur. |
+| `scripts/test-web.mjs` + `scripts/test-probe.js` | Essais sur PC (Chrome de Windows sans écran, réseau extérieur coupé) : TEST d'origine, page de l'app en navigateur normal, mode app simulé (`?npfq400app-sim=1`, localhost seulement). La sonde n'est injectée que par le serveur d'essai. |
+| `scripts/sim-test.sh` | Essai simulateur iPad sur le Mac GitHub (paysage + portrait, captures, console de l'app). |
+| `scripts/make-icon.mjs` | Icône de l'app depuis l'icône de la PWA. |
 | `www/` | Généré, non versionné. |
 | `ios/` | Projet Xcode généré par Capacitor (Swift Package Manager, pas de CocoaPods). |
 | `.github/workflows/ios-build-unsigned.yml` | Fabrication iOS sans signature sur `macos-26`, à chaque push sur `main` et à la main. |
+| `.github/workflows/ios-simulator-test.yml` | Essai simulateur iPad, à chaque push sur `main` et à la main (champ `source_ref` pour essayer un ancien commit, ex. la 0.1). |
 | `VERSION-BASE` | Version et commit de NPF-Q400 TEST copiés. |
 | `JOURNAL.md` | Journal cumulatif : nouvelle entrée en tête, rien n'est jamais effacé. |
 
@@ -47,6 +53,12 @@ npm run test:web          # essais Chrome sur PC
 - Le service worker est inutilisable dans l'app : la couche app le masque
   (`'serviceWorker' in navigator` devient faux), la PWA ne l'enregistre donc pas.
 - La carte hors ligne est lue directement dans IndexedDB.
+- Plugins Capacitor appelés sans bundler : `Capacitor.nativePromise('<jsName>', '<méthode>', {})`
+  (pont natif iOS). Plugin installé : `@capacitor-community/keep-awake` 8.0.1 (jsName `KeepAwake`).
+- PDF de la PWA : `window.open('', '_blank')` puis `.location.href = blob:` ; la couche app
+  rend une fenêtre factice et ouvre `ouvrirNpfVisionneusePdf(titre, blob)` (src/218).
+- TEST v17.97 n'a plus de bouton `#force-update-button` dans la page ; la pérenne a
+  `#boot-force-update-button`. Les deux sont masqués dans l'app.
 - Plus tard : trace de vol par `@capgo/background-geolocation`, écran allumé par
   `@capacitor-community/keep-awake`, signature sans Mac par clé API App Store Connect.
 
@@ -80,8 +92,9 @@ npm run test:web          # essais Chrome sur PC
    validée sur iPad, une version de l'app sera faite à partir de la pérenne, **après**
    que la pérenne aura reçu les fonctions qui lui manquent. Ne pas basculer vers la
    pérenne sans demande explicite.
-10. Étape des adaptations de l'app (à faire, pas encore demandé) : **masquer ou
-   désactiver le bouton « MAJ »** dans l'app (via `app-layer/`, sans toucher à `web-test/`).
+10. Bouton « MAJ » masqué et désactivé dans l'app (fait en 0.2, via `app-layer/`).
+    Pas encore demandé : trace en arrière-plan, téléchargements/partage (DIAG, KML, CSV),
+    Chat, réglages NAS/VPS.
 11. Journal `JOURNAL.md` cumulatif : nouvelle entrée en tête, historique conservé,
    statuts `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REVOIR`,
    `VALIDÉ`, `non vérifié`.
