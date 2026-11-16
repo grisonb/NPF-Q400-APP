@@ -43,6 +43,8 @@
       </array>
     </dict>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>NPF-Q400 APP utilise la position de l’iPad pour afficher l’avion sur la carte et calculer les distances, les caps et les terrains les plus proches.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

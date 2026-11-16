@@ -113,6 +113,11 @@ for ORIENT in paysage portrait; do
   /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PL"
 
   xcrun simctl install "$UDID" "$COPY"
+  # GPS : autorisation accordée d'avance (pas de fenêtre système) et position simulée
+  # (Marignane, 43.4367 N 5.2150 E). Sans le texte NSLocationWhenInUseUsageDescription
+  # dans l'app, iOS refuse quand même la position.
+  xcrun simctl privacy "$UDID" grant location "$BUNDLE_ID" > /dev/null 2>&1 || say "autorisation GPS d'avance : impossible"
+  xcrun simctl location "$UDID" set 43.4367,5.2150 > /dev/null 2>&1 || say "position simulée : impossible"
   CONSOLE="$OUT/console-app-$ORIENT.log"
   xcrun simctl launch --console-pty --terminate-running-process "$UDID" "$BUNDLE_ID" > "$CONSOLE" 2>&1 &
   LAUNCH_PID=$!
@@ -140,6 +145,11 @@ for ORIENT in paysage portrait; do
 
   say "--- messages de la page ($ORIENT)"
   grep -E "\[NPF-Q400 APP\] rapport" "$CONSOLE" | tail -1 | sed 's/^.*\[NPF-Q400 APP\] rapport /rapport : /' | tee -a "$BILAN" || true
+  if grep -q "NSLocationWhenInUseUsageDescription" "$CONSOLE"; then
+    say "GPS : iOS signale le texte d'autorisation de position ABSENT"
+  else
+    say "GPS : pas d'alerte iOS sur le texte d'autorisation de position"
+  fi
   ERRS=$(grep -E "ERROR MESSAGE|\[error\]|erreur JS|js.error|SyntaxError|TypeError|ReferenceError" "$CONSOLE" | sort | uniq -c | sort -rn)
   if [ -n "$ERRS" ]; then
     say "erreurs vues dans la console de l'app :"

@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 APP — couche « app » (version 0.2).
+ * NPF-Q400 APP — couche « app » (version 0.3).
  *
  * Ce fichier n'appartient PAS au code NPF-Q400 TEST. Il est ajouté par
  * scripts/build-www.mjs en tout premier dans <head> de www/index.html,
@@ -23,7 +23,7 @@
 (function npfQ400AppLayer() {
     'use strict';
 
-    var LAYER_VERSION = '0.2';
+    var LAYER_VERSION = '0.3';
     var BASE_VERSION = '__NPF_Q400_BASE_VERSION__';
 
     function detectApp() {
@@ -131,6 +131,7 @@
                     boutons: rect('#main-action-buttons'),
                     fondBarreHaut: rect('#npf-fond-barre-haut'),
                     versionAffichee: (document.getElementById('app-version-display') || {}).textContent || '',
+                    survolee: ((document.getElementById('nearest-commune-display') || {}).textContent || '').trim().slice(0, 80),
                     keepAwake: state.keepAwake,
                     keepAwakeDemandes: state.keepAwakeRequests,
                     erreursJs: state.jsErrors.slice()

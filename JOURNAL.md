@@ -5,6 +5,27 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 16/11/2026 — v0.3 : autorisation de position GPS
+
+- Décision de l'utilisateur (« OK push + GPS ») après le constat de la 0.2 : iOS refusait la
+  position car l'app ne déclarait pas pourquoi elle l'utilise.
+- `Info.plist` : `NSLocationWhenInUseUsageDescription` = « NPF-Q400 APP utilise la position de
+  l’iPad pour afficher l’avion sur la carte et calculer les distances, les caps et les
+  terrains les plus proches. » (texte montré par iOS dans la demande d'autorisation).
+  Position « pendant l'utilisation » seulement : la position en arrière-plan viendra avec la
+  trace (pas encore demandée).
+- Autres autorisations iOS : aucune nécessaire pour l'instant (choix de fichiers zip/PDF sans
+  appareil photo ; notifications web indisponibles dans l'app).
+- Version 0.3 (`MARKETING_VERSION = 0.3`, build 3, `LAYER_VERSION = '0.3'`).
+- Essai simulateur : autorisation de position accordée d'avance et position simulée
+  (Marignane, 43.4367 N 5.2150 E) ; le bilan dit si iOS signale encore le texte absent ; le
+  rapport de démarrage ajoute le texte « Survolée » de la PWA.
+- Essais PC : 21 contrôles sur 21 OK (rapport : « Survolée: GPS en attente », normal sur PC
+  sans position).
+- Le push du journal `f3fd601` a relancé les deux recettes GitHub ; résultat dans l'entrée suivante.
+
+---
+
 ## 16/11/2026 — v0.2 : essai simulateur iPad + premières adaptations
 
 Base inchangée : NPF-Q400 TEST v17.97 (`web-test/` identique, vérifié par git).
