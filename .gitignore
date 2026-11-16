@@ -1,0 +1,43 @@
+# Dépendances
+node_modules/
+
+# Contenu web généré (scripts/build-www.mjs) et copie dans le projet iOS
+www/
+ios/App/App/public/
+
+# Fabrication iOS / Xcode
+build/
+ios/App/build/
+ios/App/output/
+DerivedData/
+ios/App/Pods/
+Pods/
+xcuserdata/
+*.xcuserstate
+*.ipa
+*.dSYM/
+*.dSYM.zip
+ios/App/CapApp-SPM/.build/
+.swiftpm/
+
+# Fichiers générés par npx cap sync
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/capacitor-cordova-ios-plugins/
+
+# Secrets : ne jamais publier (signature Apple plus tard)
+.env
+.env.*
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.keychain
+*.keychain-db
+AuthKey_*
+
+# Système
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+*.log

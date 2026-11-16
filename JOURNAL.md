@@ -1,0 +1,81 @@
+# NPF-Q400 APP — journal cumulatif
+
+Nouvelle entrée en tête. Rien n'est jamais effacé (essais ratés et abandons compris).
+Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REVOIR`, `VALIDÉ`, `non vérifié`.
+
+---
+
+## 16/11/2026 — v0.1 : création du projet (sans compte Apple, sans signature)
+
+### Base
+- NPF-Q400 TEST **v17.97**, commit `1884639` (`188463995e34d607526123967fc97eefcfb94bab`),
+  dernière version poussée sur `grisonb/NPF-Q400-TEST` (branche `main`, contrôlé par
+  `git ls-remote` : identique au commit local).
+- Copie par `git archive` du commit (lecture seule de TEST) dans `web-test/` :
+  32 fichiers web, 112 Mo, tous identiques octet par octet au commit (`git hash-object`).
+- Non copiés (pas des fichiers web) : `.github/`, `.gitignore`, `.nojekyll`, `CLAUDE.md`,
+  `NPF_Q400_LOG.txt`, `tools/`, `src/` (sources de `script.js`), `icons/Thumbs.db`.
+- Plus gros fichier : `communes.json` 60 Mo (sous la limite GitHub de 100 Mo ; GitHub
+  affiche un simple avertissement au-delà de 50 Mo).
+
+### Projet Capacitor
+- Capacitor **8.6.2** (`@capacitor/core`, `@capacitor/ios`, `@capacitor/cli`, versions exactes),
+  iOS uniquement, projet Xcode en Swift Package Manager (pas de CocoaPods).
+- Nom « NPF-Q400 APP », identifiant `com.grisonb.npfq400app`, version 0.1
+  (`MARKETING_VERSION = 0.1`, build 1), iOS 15 minimum (valeur Capacitor 8).
+- iPad uniquement (`TARGETED_DEVICE_FAMILY = 2`), 4 orientations : le manifest de la
+  PWA n'impose aucune orientation.
+- Ajustements de `Info.plist` : langue `fr`, `arm64` au lieu de l'ancien `armv7`.
+
+### Couche app (`app-layer/npf-q400-app.js`)
+- Ajoutée par `scripts/build-www.mjs` en tête de `<head>` de `www/index.html` (une ligne) ;
+  `web-test/` n'est pas modifié.
+- Détection : `Capacitor.isNativePlatform()` ou protocole `capacitor:`. Simulation pour
+  essais PC : `?npfq400app-sim=1`, acceptée seulement sur localhost/127.0.0.1.
+- Dans l'app : `window.NPF_Q400_APP`, classe `html.npf-q400-app` ; service worker
+  masqué (`'serviceWorker' in navigator` devient faux, la PWA ne l'enregistre donc pas) ;
+  fenêtres « Mise à jour » et « Mise à jour installée » masquées puis retirées.
+- Hors de l'app : ne fait rien.
+- Bouton « MAJ » du menu : laissé visible dans l'app pour l'instant. Dans l'app il ne
+  fait que recharger la page. Décision du 16/11 : le **masquer ou le désactiver** dans
+  l'app lors de l'étape des adaptations — **NON IMPLÉMENTÉ**.
+
+### Décision du 16/11 : origine du contenu web
+- À moyen terme, l'app sera une copie de **NPF-Q400 pérenne**, pas de TEST.
+- Les essais se font sur la copie figée de TEST. Une fois l'app validée sur iPad, une
+  version de l'app sera faite à partir de la pérenne, après que la pérenne aura reçu
+  les fonctions qui lui manquent — **À FAIRE plus tard**.
+
+### Dépôt GitHub
+- Clé de l'API SafeSky présente dans `web-test/script.js` : déjà publique dans
+  NPF-Q400 TEST et dans la pérenne (dépôts publics) ; conservée telle quelle (copie figée),
+  signalée à l'utilisateur avant la création du dépôt.
+- Dépôt public `grisonb/NPF-Q400-APP` créé le 16/11 après « OK » de l'utilisateur.
+
+### Recette GitHub Actions (`.github/workflows/ios-build-unsigned.yml`)
+- Mac `macos-26` (disponible officiellement chez GitHub depuis le 26/02/2026), Node 24,
+  `npm ci`, `build-www`, `npx cap sync ios`, `xcodebuild` Release iphoneos avec
+  `CODE_SIGNING_ALLOWED=NO`, puis `.ipa` non signé + journal `xcodebuild` en artefact (30 jours).
+- Lancement à chaque push sur `main` et à la main (`workflow_dispatch`).
+- Aucun secret utilisé.
+
+### Essais sur PC (`npm run test:web`)
+- Chromium de Playwright sous WSL : **ABANDONNÉ** (bibliothèque système `libnss3`
+  absente, installation système non demandée). Remplacé par le Chrome de Windows sans
+  écran, profil temporaire.
+- Réseau extérieur coupé par `--host-resolver-rules` : la page a tenté de joindre
+  `grisonb.synology.me`, `grisonb.github.io`, `raw.githubusercontent.com`,
+  `cdn.jsdelivr.net`, `a.tile.openstreetmap.org`, `etalab-datasets.geo.data.gouv.fr`
+  — tous bloqués (aucun accès NAS/VPS).
+- Résultat : 12 contrôles sur 12 OK — aucune erreur JS dans les 3 pages ; page de l'app
+  en navigateur normal identique à TEST (service worker enregistré et actif, fenêtre de
+  mise à jour affichée, même titre/version, mêmes serveurs tentés) ; mode app simulé :
+  couche active, service worker invisible, fenêtre de mise à jour bloquée, carte présente.
+- **non vérifié** : comportement réel dans l'app sur iPad (WKWebView, `capacitor://localhost`) ;
+  la détection par `window.Capacitor` n'a été essayée qu'en simulation.
+
+### Suite (sans compte Apple)
+- Fabrication sans signature verte sur GitHub : voir l'entrée suivante.
+- Étapes suivantes possibles : PDF, trace (`@capgo/background-geolocation`), écran allumé
+  (`@capacitor-community/keep-awake`), icône de l'app (actuellement icône Capacitor par
+  défaut — **NON IMPLÉMENTÉ**), essai dans le simulateur iPad sur le Mac GitHub.

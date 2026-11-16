@@ -1,0 +1,92 @@
+# NPF-Q400 APP — fabrication iPad SANS signature (aucun compte Apple, aucun secret).
+# Le résultat (App.app non signée, emballée en .ipa non signé) ne peut PAS être
+# installé sur un iPad : il prouve seulement que l'app se fabrique correctement.
+name: NPF-Q400 APP - fabrication iOS sans signature
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-ios-unsigned:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Outils présents sur le Mac
+        run: |
+          sw_vers
+          xcodebuild -version
+          node --version
+          npm --version
+
+      - name: Installer les dépendances (npm ci)
+        run: npm ci
+
+      - name: Préparer www/ (NPF-Q400 TEST figée + couche NPF-Q400 APP)
+        run: node scripts/build-www.mjs
+
+      - name: npx cap sync ios
+        run: npx cap sync ios
+
+      - name: Fabriquer l'app sans signature (CODE_SIGNING_ALLOWED=NO)
+        run: |
+          mkdir -p build
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build/xcodebuild.log | grep -E "error:|warning: .*deprecated|\*\* BUILD" || true
+          grep -q "\*\* BUILD SUCCEEDED \*\*" build/xcodebuild.log
+
+      - name: Emballer le résultat (.ipa NON signé)
+        run: |
+          APP="build/DerivedData/Build/Products/Release-iphoneos/App.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" -c "Print :UIDeviceFamily" "$APP/Info.plist"
+          test -f "$APP/public/index.html"
+          grep -q "app-layer/npf-q400-app.js" "$APP/public/index.html"
+          mkdir -p build/out/Payload
+          cp -R "$APP" build/out/Payload/
+          (cd build/out && zip -qry NPF-Q400-APP-0.1-non-signe.ipa Payload)
+          du -sh "$APP" build/out/NPF-Q400-APP-0.1-non-signe.ipa
+
+      - name: Garder le résultat (artefact téléchargeable)
+        uses: actions/upload-artifact@v7
+        with:
+          name: NPF-Q400-APP-0.1-non-signe
+          path: |
+            build/out/NPF-Q400-APP-0.1-non-signe.ipa
+            build/xcodebuild.log
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Garder le journal de fabrication en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: journal-xcodebuild-echec
+          path: build/xcodebuild.log
+          if-no-files-found: ignore

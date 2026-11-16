@@ -1,0 +1,8 @@
+# Version de NPF-Q400 TEST copiée dans web-test/ (copie figée, jamais modifiée ici)
+version=v17.97
+commit=188463995e34d607526123967fc97eefcfb94bab
+depot=https://github.com/grisonb/NPF-Q400-TEST (branche main, dernière version poussée, vérifiée par git ls-remote le 16/11/2026)
+date_commit=2026-11-12T19:35:25+01:00
+copie_le=2026-11-16
+methode=git archive du commit poussé (lecture seule), 32 fichiers web, contrôlés identiques octet par octet (git hash-object)
+exclus=.github, .gitignore, .nojekyll, CLAUDE.md, NPF_Q400_LOG.txt, tools/, src/ (sources de script.js), icons/Thumbs.db
