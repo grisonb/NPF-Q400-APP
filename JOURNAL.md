@@ -59,8 +59,48 @@ Base inchangée : NPF-Q400 TEST v17.97 (`web-test/` identique, vérifié par git
   visionneuse avec titre et page dessinée, sans onglet ; barre 32 px (boutons à 62 px) ;
   aucune erreur JS.
 
+### Push et fabrications GitHub (après « OK push », commits `280cacf` + `0299c97`)
+- Fabrication sans signature 0.2 : **verte**, run 43928421724, 18:24:11 → 18:26:03 UTC (≈ 2 min).
+- Essai simulateur 0.2 : **vert**, run 43928421784, 18:24:11 → 18:50:38 UTC (≈ 26 min).
+- Essai simulateur 0.1 : premier lancement **en échec** (run 43928466031) — mon erreur :
+  numéro de commit abrégé (`280cacf`) refusé par `actions/checkout`. Relancé à la main avec
+  le numéro complet, sans changement de code ni push : **vert**, run 43933223472,
+  18:51:29 → 19:07:20 UTC (≈ 16 min).
+
 ### Résultats simulateur 0.1 / 0.2
-- Voir l'entrée suivante (après le push).
+- Simulateur : **iPad (9th generation)**, iOS 26.5, Xcode 26.6 (l'iPad visé existe).
+- Les deux versions démarrent, en paysage et en portrait ; l'app tourne encore après 40 s ;
+  la carte s'affiche (25 tuiles en paysage, 20 en portrait selon le rapport 0.2) ; la fenêtre
+  de mise à jour PWA n'apparaît pas ; aucune erreur JS dans la console de l'app (0.1 et 0.2).
+- **Écran blanc à 10 s en portrait** (0.1 et 0.2), carte affichée à 25 s ; en paysage, contenu
+  déjà affiché à 10 s. Démarrage lent dans le simulateur du Mac GitHub (Debug, simulateur neuf) —
+  durée sur un vrai iPad **non vérifiée**. **À MESURER** sur iPad.
+- Fenêtre « Télécharger cartes VAC » (Oui / Non) affichée au premier lancement : question
+  normale de la PWA au premier démarrage, ce n'est pas la fenêtre de mise à jour.
+- **Écran allumé** : 0.1 → « Screen Wake Lock iPad indisponible: NotAllowedError » (le Wake Lock
+  du navigateur ne marche pas dans l'app) ; 0.2 → « To Native -> KeepAwake keepAwake » et
+  rapport « écran allumé » : l'adaptation fonctionne dans le simulateur. **VALIDÉ (simulateur)**.
+- **Barre du haut** : 0.1 en portrait → pas de bande sombre, l'heure et la batterie sont posées
+  sur la carte claire, le panneau du haut commence juste sous l'heure ; 0.2 → bande sombre de
+  32 px, panneau et boutons sous la bande, rien de caché. Rapport 0.2 : boutons à 62 px du haut,
+  bande 32 px, en paysage comme en portrait.
+- **Paysage** : le simulateur reste tenu en portrait ; iPadOS 26 affiche alors l'app paysage
+  réduite (≈ 75 %) au centre avec des bandes noires. La page, elle, a bien la taille paysage
+  (1080 × 810). Une vraie rotation du simulateur n'est pas possible avec `simctl` —
+  **À REVOIR** (essai de rotation par le menu du Simulateur si on veut une capture plein écran).
+- **GPS** : iOS signale « NSLocationWhenInUseUsageDescription » absent dans l'`Info.plist` →
+  dans l'app, la position GPS est refusée par iOS tant que ce texte n'est pas ajouté
+  (0.1 et 0.2). **NON IMPLÉMENTÉ** — à faire en priorité (simple ajout dans `Info.plist`).
+- PDF dans la visionneuse : vérifié sur PC seulement ; dans le simulateur **non vérifié**
+  (pas de VAC téléchargée, aucun toucher automatique).
+- Appels NAS/VPS depuis l'app : non sollicités par l'essai ; **non vérifié** (attendu en échec
+  tant que l'origine `capacitor://localhost` n'est pas autorisée côté serveur).
+
+### Contrôles de fin
+- `web-test/` identique à la 0.1 ; NPF-Q400 pérenne : `git status` identique au départ.
+- NPF-Q400 TEST : `git status` **différent** du départ : 9 fichiers modifiés non commités
+  (v17.98 en cours, modifiés à 19:43 heure de Paris). Pas de mon fait : pendant cette étape,
+  seules des commandes de lecture ont été lancées sur TEST. Rien n'a été touché ni annulé.
 
 ---
 
