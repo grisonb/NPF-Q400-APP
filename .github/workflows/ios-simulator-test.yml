@@ -1,15 +1,20 @@
 # NPF-Q400 APP — essai dans le simulateur iPad (aucun compte Apple, aucune signature, aucun secret).
 # Fabrique l'app pour le simulateur, la lance en paysage puis en portrait, prend des
 # captures d'écran et relève les erreurs JS de la page. Tout est gardé en artefact.
+#
+# Lancement : à la main (onglet Actions), ou par un push sur main qui CHANGE la version
+# de l'app (champ "version" de package.json). Un push sans changement de version (journal,
+# documentation…) ne lance pas l'essai (≈ 15 à 25 min de Mac).
 name: NPF-Q400 APP - essai simulateur iPad
 
 on:
   push:
     branches: [main]
+    paths: [package.json]
   workflow_dispatch:
     inputs:
       source_ref:
-        description: "Commit ou branche du code de l'app à essayer (vide = ce commit)"
+        description: "Numéro de commit COMPLET (40 caractères) ou branche du code à essayer (vide = ce commit)"
         required: false
         default: ""
       label:
@@ -25,7 +30,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Récupérer le code (avec l'historique du push)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: La version de l'app a-t-elle changé ?
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Lancement à la main : essai simulateur."
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          BEFORE="${{ github.event.before }}"
+          NOW=$(node -p "require('./package.json').version")
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "Commit précédent inconnu : essai simulateur par prudence (version $NOW)."
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          OLD=$(git show "$BEFORE:package.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).version)}catch(e){console.log('')}})")
+          echo "Version avant le push : ${OLD:-inconnue} ; après : $NOW"
+          if [ "$OLD" != "$NOW" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; echo "Version inchangée : pas d'essai simulateur."; fi
+
   simulator-test:
+    needs: version-check
+    if: needs.version-check.outputs.run == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     steps:

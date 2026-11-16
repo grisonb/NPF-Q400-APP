@@ -11,7 +11,7 @@ But final : enregistrer la trace de vol automatiquement en arrière-plan.
 - Identifiant d'app : `com.grisonb.npfq400app` — nom affiché : « NPF-Q400 APP ».
 - iPad uniquement (`TARGETED_DEVICE_FAMILY = 2`), 4 orientations (comme la PWA,
   dont le manifest n'impose aucune orientation).
-- Version de l'app : **0.3** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
+- Version de l'app : **0.4** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
   `project.pbxproj`, `package.json`, `LAYER_VERSION` dans `app-layer/`).
 - Icône de l'app = icône de la PWA (`icons/icon-512x512.png` du manifest), refaite par
   `node scripts/make-icon.mjs` (1024 px, sans transparence).
@@ -34,7 +34,7 @@ simple**. Si quelque chose n'est pas vérifiable, écrire « non vérifié ».
 | `www/` | Généré, non versionné. |
 | `ios/` | Projet Xcode généré par Capacitor (Swift Package Manager, pas de CocoaPods). |
 | `.github/workflows/ios-build-unsigned.yml` | Fabrication iOS sans signature sur `macos-26`, à chaque push sur `main` et à la main. |
-| `.github/workflows/ios-simulator-test.yml` | Essai simulateur iPad, à chaque push sur `main` et à la main (champ `source_ref` pour essayer un ancien commit, ex. la 0.1). |
+| `.github/workflows/ios-simulator-test.yml` | Essai simulateur iPad : **à la main**, ou par un push sur `main` qui **change la version** de `package.json` (pas pour un simple journal). Champ `source_ref` = numéro de commit COMPLET pour essayer un ancien commit. Trajet GPS simulé Marignane → Avignon à 60 m/s. |
 | `VERSION-BASE` | Version et commit de NPF-Q400 TEST copiés. |
 | `JOURNAL.md` | Journal cumulatif : nouvelle entrée en tête, rien n'est jamais effacé. |
 
@@ -59,6 +59,14 @@ npm run test:web          # essais Chrome sur PC
 - GPS : dans WKWebView, `navigator.geolocation` déclenche une 2e question « localhost » à chaque
   lancement (aucune API Apple publique pour l'accorder) → dans l'app, la couche app le remplace
   par le plugin natif. `NSLocationWhenInUseUsageDescription` est dans `Info.plist`.
+- GPS : la PWA doit recevoir EXACTEMENT ce que donne Safari (WebKit `GeolocationPositionDataCocoa.mm`) :
+  `heading` = route suivie (`course`), jamais la boussole ; `speed`, `altitude`, `altitudeAccuracy`
+  vides si invalides ; heure en ms ; haute précision ; `maximumAge` respecté ; un suivi continue après
+  un délai dépassé. Toute modification de la section 7 de la couche app doit garder ces contrôles
+  (essais PC, contrôle GPS de 14 s en Debug).
+- Numéro de version : changer `package.json`, `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`
+  et `LAYER_VERSION` ENSEMBLE, dans le même commit que le changement de l'app (sinon l'essai
+  simulateur ne se lance pas et le journal se trompe de version).
 - PDF de la PWA : `window.open('', '_blank')` puis `.location.href = blob:` ; la couche app
   rend une fenêtre factice et ouvre `ouvrirNpfVisionneusePdf(titre, blob)` (src/218).
 - TEST v17.97 n'a plus de bouton `#force-update-button` dans la page ; la pérenne a

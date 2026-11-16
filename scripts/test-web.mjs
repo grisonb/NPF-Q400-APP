@@ -116,7 +116,15 @@ const checks = [
     ['C : écran allumé : demande -> keepAwake, relâche -> allowSleep', /^keepAwake \/ écran allumé$/.test(c.keepAwakeApresDemande || '') && /^allowSleep \/ veille permise$/.test(c.keepAwakeApresRelache || '') && c.keepAwakeSentinelleRelachee === true],
     ['C : VAC ouverte dans la visionneuse interne (titre, page dessinée, pas d\'onglet)', c.pdfVac.visionneuse === true && c.pdfVac.titre === 'VAC LFZZ' && c.pdfVac.pagesDessinees >= 1 && c.pdfVac.nouvelOnglet === false],
     ['C : PDF terrain ouvert dans la visionneuse interne (titre, page dessinée, pas d\'onglet)', c.pdfTerrain.visionneuse === true && c.pdfTerrain.titre === 'PDF LFZY' && c.pdfTerrain.pagesDessinees >= 1 && c.pdfTerrain.nouvelOnglet === false],
-    ['C : GPS par le plugin (position ponctuelle, suivi, arrêt du suivi)', same(c.gpsPonctuel, [43.4367, 5.215]) && c.gpsSuivi && c.gpsSuivi.recues >= 2 && c.gpsSuivi.apresArret === 0 && c.npfQ400AppFin.gpsErreurs === 0],
+    ['C : GPS — mêmes champs que Safari (latitude, longitude, accuracy, altitude, altitudeAccuracy, heading, speed + heure)', !!c.gpsP1 && c.gpsP1.cles === 'accuracy,altitude,altitudeAccuracy,heading,latitude,longitude,speed' && typeof c.gpsP1.coords.latitude === 'number' && typeof c.gpsP1.coords.longitude === 'number' && c.gpsP1.coords.accuracy === 5],
+    ['C : GPS — heure en millisecondes et récente', !!c.gpsP1 && c.gpsP1.timestamp > 1e12 && c.gpsP1.ageMs >= 0 && c.gpsP1.ageMs < 3000],
+    ['C : GPS — cap = route suivie (335°), pas la boussole (90°) ; vitesse 60 m/s ; altitude 300 m', !!c.gpsSuivi && c.gpsSuivi.valides.length >= 3 && c.gpsSuivi.valides.every(v => v.heading === 335 && v.speed === 60 && v.altitude === 300 && v.altitudeAccuracy === 10)],
+    ['C : GPS — valeurs invalides du plugin (-1) rendues vides comme Safari', !!c.gpsSuivi && c.gpsSuivi.invalides.length >= 1 && c.gpsSuivi.invalides.every(v => v.heading === null && v.speed === null && v.altitude === null && v.altitudeAccuracy === null && typeof v.latitude === 'number')],
+    ['C : GPS — haute précision envoyée au plugin pour chaque appel ; sans timeout = pas de limite', !!c.gpsOptionsPlugin && c.gpsOptionsPlugin.length === 2 && c.gpsOptionsPlugin.every(x => x.includes('"enableHighAccuracy":true')) && c.gpsOptionsPlugin[1].includes('"timeout":86400000')],
+    ['C : GPS — maximumAge : dernière position rendue sans nouvel appel au plugin', !!c.gpsCache && c.gpsCache.memeHeure === true],
+    ['C : GPS — suivi ≈ 1 position par seconde, plus rien après l\'arrêt', !!c.gpsSuivi && c.gpsSuivi.recues >= 5 && c.gpsSuivi.ecartMedianMs >= 900 && c.gpsSuivi.ecartMedianMs <= 1150 && c.gpsSuivi.apresArret === 0],
+    ['C : GPS — contrôle de 14 s de la couche app (cadence, vitesse, cap, altitude)', !!c.gpsControle && c.gpsControle.positions >= 12 && c.gpsControle.ecartMedianMs >= 900 && c.gpsControle.ecartMedianMs <= 1150 && c.gpsControle.avecVitesse >= 1 && c.gpsControle.avecCap >= 1 && c.gpsControle.avecAltitude >= 1 && c.gpsControle.heureEnMs === true && c.gpsControle.erreurs.length === 0],
+    ['C : GPS — aucune erreur GPS', !!c.gpsStats && c.gpsStats.erreurs === 0],
     ['C : rapport de démarrage écrit', !!(c.npfQ400AppFin && c.npfQ400AppFin.startupReport && c.npfQ400AppFin.startupReport.carte === true)]
 ];
 let ok = true;

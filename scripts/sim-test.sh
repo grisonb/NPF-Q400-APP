@@ -113,11 +113,17 @@ for ORIENT in paysage portrait; do
   /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PL"
 
   xcrun simctl install "$UDID" "$COPY"
-  # GPS : autorisation accordée d'avance (pas de fenêtre système) et position simulée
-  # (Marignane, 43.4367 N 5.2150 E). Sans le texte NSLocationWhenInUseUsageDescription
-  # dans l'app, iOS refuse quand même la position.
+  # GPS : autorisation accordée d'avance (pas de fenêtre système) et trajet simulé
+  # Marignane -> Salon -> Avignon à 60 m/s (≈ 117 kt), une position par seconde, pour que
+  # la vitesse et la route (cap) soient connues. Repli : position fixe à Marignane.
   xcrun simctl privacy "$UDID" grant location "$BUNDLE_ID" > /dev/null 2>&1 || say "autorisation GPS d'avance : impossible"
-  xcrun simctl location "$UDID" set 43.4367,5.2150 > /dev/null 2>&1 || say "position simulée : impossible"
+  if xcrun simctl location "$UDID" start --speed=60 --interval=1 \
+       43.4367,5.2150 43.6064,5.1092 43.9078,4.9017 > "$WORK/location-$ORIENT.log" 2>&1; then
+    say "GPS simulé : trajet Marignane -> Salon -> Avignon, 60 m/s, 1 position par seconde"
+  else
+    say "GPS simulé : trajet impossible ($(head -1 "$WORK/location-$ORIENT.log")) -> position fixe"
+    xcrun simctl location "$UDID" set 43.4367,5.2150 > /dev/null 2>&1 || say "position simulée : impossible"
+  fi
   CONSOLE="$OUT/console-app-$ORIENT.log"
   xcrun simctl launch --console-pty --terminate-running-process "$UDID" "$BUNDLE_ID" > "$CONSOLE" 2>&1 &
   LAUNCH_PID=$!
@@ -145,6 +151,24 @@ for ORIENT in paysage portrait; do
 
   say "--- messages de la page ($ORIENT)"
   grep -E "\[NPF-Q400 APP\] rapport" "$CONSOLE" | tail -1 | sed 's/^.*\[NPF-Q400 APP\] rapport /rapport : /' | tee -a "$BILAN" || true
+  RAPPORT=$(grep -E "\[NPF-Q400 APP\] rapport" "$CONSOLE" | tail -1 | sed 's/^.*\[NPF-Q400 APP\] rapport //')
+  if [ -n "$RAPPORT" ]; then
+    echo "$RAPPORT" | python3 -c '
+import json, sys
+r = json.load(sys.stdin)
+g = r.get("gps") or {}
+c = r.get("gpsControle")
+print("GPS (ce que reçoit la PWA) : état %s · %s positions · options demandées %s · options envoyées au plugin %s" % (
+    g.get("etat"), g.get("positions"), g.get("optionsDemandees"), g.get("optionsNatives")))
+if isinstance(c, dict):
+    print("contrôle GPS 14 s : %s positions · écart médian %s ms (min %s, max %s) · avec vitesse %s · avec cap %s · avec altitude %s · avec précision %s · heure en ms %s · retard heure %s ms · erreurs %s" % (
+        c.get("positions"), c.get("ecartMedianMs"), c.get("ecartMinMs"), c.get("ecartMaxMs"), c.get("avecVitesse"),
+        c.get("avecCap"), c.get("avecAltitude"), c.get("avecPrecision"), c.get("heureEnMs"), c.get("retardHeureMs"), c.get("erreurs")))
+    print("dernière position reçue : %s" % json.dumps(c.get("derniere"), ensure_ascii=False))
+else:
+    print("contrôle GPS : %s" % c)
+' | tee -a "$BILAN" || true
+  fi
   if grep -q "NSLocationWhenInUseUsageDescription" "$CONSOLE"; then
     say "GPS : iOS signale le texte d'autorisation de position ABSENT"
   else
@@ -158,6 +182,7 @@ for ORIENT in paysage portrait; do
     say "erreurs vues dans la console de l'app : aucune"
   fi
   say "lignes de console recueillies : $(wc -l < "$CONSOLE" | tr -d ' ')"
+  xcrun simctl location "$UDID" clear > /dev/null 2>&1 || true
   xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
   xcrun simctl delete "$UDID" > /dev/null 2>&1 || true
 done

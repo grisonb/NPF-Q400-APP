@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 APP — couche « app » (version 0.3).
+ * NPF-Q400 APP — couche « app » (version 0.4).
  *
  * Ce fichier n'appartient PAS au code NPF-Q400 TEST. Il est ajouté par
  * scripts/build-www.mjs en tout premier dans <head> de www/index.html,
@@ -18,14 +18,15 @@
  *        6. PDF (VAC, PDF terrains, Doc PDF Réduite, Carte Fréquences OPS) : au lieu
  *           d'un nouvel onglet (window.open), ouverture dans la visionneuse PDF.js
  *           interne de la PWA (ouvrirNpfVisionneusePdf, src/218).
- *   0.3  7. GPS : navigator.geolocation passe par le plugin natif @capacitor/geolocation
- *           (une seule autorisation, celle d'iOS ; pas de seconde question « localhost »).
+ *   0.4  7. GPS : navigator.geolocation passe par le plugin natif @capacitor/geolocation
+ *           (une seule autorisation, celle d'iOS ; pas de seconde question « localhost »),
+ *           avec exactement le contenu et le comportement du GPS de Safari.
  * Pas encore : trace en arrière-plan, téléchargements/partage, Chat, réglages NAS/VPS.
  */
 (function npfQ400AppLayer() {
     'use strict';
 
-    var LAYER_VERSION = '0.3';
+    var LAYER_VERSION = '0.4';
     var BASE_VERSION = '__NPF_Q400_BASE_VERSION__';
 
     function detectApp() {
@@ -134,9 +135,8 @@
                     fondBarreHaut: rect('#npf-fond-barre-haut'),
                     versionAffichee: (document.getElementById('app-version-display') || {}).textContent || '',
                     survolee: ((document.getElementById('nearest-commune-display') || {}).textContent || '').trim().slice(0, 80),
-                    gps: state.gps,
-                    gpsPositions: state.gpsPositions,
-                    gpsErreur: state.gpsDerniereErreur,
+                    gps: gpsStats,
+                    gpsControle: state.gpsControle,
                     keepAwake: state.keepAwake,
                     keepAwakeDemandes: state.keepAwakeRequests,
                     erreursJs: state.jsErrors.slice()
@@ -322,20 +322,48 @@
         state.keepAwakeActiveCount = function () { return active.length; };
     })();
 
-    /* ---------------------------------------------------------------- 7. GPS (0.3) */
+    /* ---------------------------------------------------------------- 7. GPS (0.4) */
     /*
      * Dans l'app, le GPS du moteur web (WKWebView) pose une seconde question
      * « localhost aimerait utiliser votre position » à chaque lancement, en plus de
      * l'autorisation d'iOS ; Apple ne permet pas de l'accorder d'office. Dans l'app
      * seulement, navigator.geolocation est donc remplacé par un équivalent qui lit la
      * position par le plugin natif @capacitor/geolocation (une seule autorisation,
-     * celle d'iOS). Mêmes fonctions et même format qu'un navigateur :
-     * getCurrentPosition, watchPosition, clearWatch.
+     * celle d'iOS). Fonctions : getCurrentPosition, watchPosition, clearWatch.
+     *
+     * Même contenu que le GPS de Safari (WebKit, GeolocationPositionDataCocoa.mm) :
+     *   latitude, longitude, accuracy (précision horizontale), timestamp (ms) ;
+     *   altitude + altitudeAccuracy seulement si la précision verticale est valide ;
+     *   speed seulement si la vitesse est valide (>= 0) ;
+     *   heading = ROUTE SUIVIE (course) seulement si elle est valide — et non la
+     *   boussole de l'iPad, que le plugin mettrait en premier.
+     * Même comportement que Safari :
+     *   haute précision (kCLLocationAccuracyBest, sans filtre de distance → même
+     *   cadence d'iOS, ≈ 1 par seconde) : demandée pour chaque appel, pour qu'une
+     *   demande ponctuelle ne dégrade jamais le suivi en cours (le plugin n'a qu'un
+     *   réglage pour tout) ;
+     *   maximumAge : la dernière position est rendue tout de suite si elle est assez
+     *   récente (le plugin l'ignore) ;
+     *   timeout absent = pas de limite (le plugin mettrait 5 s) ;
+     *   suivi : après une erreur « délai dépassé », le suivi continue (le plugin
+     *   l'arrêterait) — il est relancé.
      */
-    state.gps = 'non installé';
-    state.gpsPositions = 0;
-    state.gpsErreurs = 0;
-    state.gpsDerniereErreur = '';
+    var GPS_NO_TIMEOUT_MS = 24 * 3600 * 1000;
+    var gpsStats = {
+        etat: 'non installé',
+        positions: 0,
+        erreurs: 0,
+        derniereErreur: '',
+        appelsPonctuels: 0,
+        reponsesDepuisCache: 0,
+        suivisLances: 0,
+        suivisRelances: 0,
+        optionsDemandees: [],    /* options demandées à navigator.geolocation (PWA et contrôle DIAG ; dernières, sans doublon) */
+        optionsNatives: null,    /* options réellement envoyées au plugin (dernières) */
+        dernierePosition: null,
+        intervallesSuiviMs: []   /* 20 derniers écarts entre deux positions de suivi */
+    };
+    state.gpsStats = gpsStats;
     (function installGeolocation() {
         var cap = window.Capacitor;
         var native = null;
@@ -346,46 +374,35 @@
                 clear: function (id) { return cap.nativePromise('Geolocation', 'clearWatch', { id: id }); }
             };
         } else if (detectedBy === 'simulation-pc') {
-            /* Essais PC : position fixe (Marignane) au lieu du plugin natif. */
-            var simPosition = function () {
-                return { timestamp: Date.now(), coords: { latitude: 43.4367, longitude: 5.2150, accuracy: 5,
-                    altitude: 30, altitudeAccuracy: 5, heading: null, speed: 0 } };
-            };
-            var simTimers = {};
-            var simNext = 1;
-            native = {
-                once: function () { return Promise.resolve(simPosition()); },
-                watch: function (o, cb) {
-                    var id = 'sim-' + (simNext++);
-                    setTimeout(function () { cb(simPosition()); }, 0);
-                    simTimers[id] = setInterval(function () { cb(simPosition()); }, 1000);
-                    return id;
-                },
-                clear: function (id) { clearInterval(simTimers[id]); delete simTimers[id]; return Promise.resolve(); }
-            };
+            native = makePcSimulatedPlugin();
         }
         if (!native) {
-            state.gps = 'indisponible (pont natif absent)';
+            gpsStats.etat = 'indisponible (pont natif absent)';
             return;
         }
 
-        function num(v) {
-            return (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? null : Number(v);
+        function finite(v) {
+            return v !== null && v !== undefined && v !== '' && isFinite(Number(v));
         }
+        /* Position du plugin → position au format de Safari (voir plus haut). */
         function toPosition(data) {
             var c = (data && data.coords) || {};
-            return {
-                timestamp: num(data && data.timestamp) || Date.now(),
-                coords: {
-                    latitude: Number(c.latitude),
-                    longitude: Number(c.longitude),
-                    accuracy: num(c.accuracy),
-                    altitude: num(c.altitude),
-                    altitudeAccuracy: num(c.altitudeAccuracy),
-                    heading: num(c.heading),
-                    speed: num(c.speed)
-                }
+            var verticalOk = finite(c.altitudeAccuracy) && Number(c.altitudeAccuracy) >= 0;
+            var coords = {
+                latitude: Number(c.latitude),
+                longitude: Number(c.longitude),
+                accuracy: finite(c.accuracy) ? Number(c.accuracy) : null,
+                altitude: verticalOk && finite(c.altitude) ? Number(c.altitude) : null,
+                altitudeAccuracy: verticalOk ? Number(c.altitudeAccuracy) : null,
+                heading: finite(c.course) && Number(c.course) >= 0 ? Number(c.course) : null,
+                speed: finite(c.speed) && Number(c.speed) >= 0 ? Number(c.speed) : null
             };
+            var position = {
+                timestamp: finite(data && data.timestamp) ? Math.round(Number(data.timestamp)) : Date.now(),
+                coords: coords
+            };
+            position.toJSON = function () { return { timestamp: position.timestamp, coords: coords }; };
+            return position;
         }
         function toError(err) {
             var code = String((err && err.code) || '');
@@ -393,15 +410,28 @@
             var c = 2; /* POSITION_UNAVAILABLE */
             if (/(0003|0007|0008)$/.test(code) || /denied|restricted|not enabled/i.test(message)) c = 1;
             else if (/0010$/.test(code) || /time/i.test(message)) c = 3;
-            state.gpsErreurs += 1;
-            state.gpsDerniereErreur = message.slice(0, 120);
+            gpsStats.erreurs += 1;
+            gpsStats.derniereErreur = message.slice(0, 120);
             return { code: c, message: message, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 };
         }
-        function toOptions(o) {
+        function notePwaOptions(o) {
+            var text = JSON.stringify({
+                enableHighAccuracy: !!(o && o.enableHighAccuracy),
+                timeout: o && finite(o.timeout) ? Number(o.timeout) : 'aucun',
+                maximumAge: o && finite(o.maximumAge) ? Number(o.maximumAge) : 0
+            });
+            if (gpsStats.optionsDemandees.indexOf(text) < 0) {
+                gpsStats.optionsDemandees.push(text);
+                if (gpsStats.optionsDemandees.length > 8) gpsStats.optionsDemandees.shift();
+            }
+        }
+        function toNativeOptions(o) {
             o = o || {};
-            var r = { enableHighAccuracy: !!o.enableHighAccuracy };
-            if (isFinite(Number(o.timeout))) r.timeout = Number(o.timeout);
-            if (isFinite(Number(o.maximumAge))) r.maximumAge = Number(o.maximumAge);
+            var r = {
+                enableHighAccuracy: true,
+                timeout: finite(o.timeout) && Number(o.timeout) > 0 ? Math.round(Number(o.timeout)) : GPS_NO_TIMEOUT_MS
+            };
+            gpsStats.optionsNatives = r;
             return r;
         }
         /* Une erreur dans le code de la PWA doit rester visible (console, DIAG). */
@@ -409,36 +439,73 @@
             if (typeof fn !== 'function') return;
             try { fn(arg); } catch (error) { setTimeout(function () { throw error; }, 0); }
         }
+        var lastPosition = null;
         function gotPosition(data) {
-            state.gpsPositions += 1;
-            state.gps = 'position reçue';
-            return toPosition(data);
+            var p = toPosition(data);
+            lastPosition = p;
+            gpsStats.positions += 1;
+            gpsStats.etat = 'position reçue';
+            gpsStats.dernierePosition = p.toJSON();
+            return p;
         }
 
         var watches = {};
         var nextId = 1;
+        function startNativeWatch(id, options, success, error) {
+            var lastAt = 0;
+            gpsStats.suivisLances += 1;
+            watches[id] = native.watch(toNativeOptions(options), function (data, err) {
+                if (!watches.hasOwnProperty(id)) return;
+                if (err || !data) {
+                    var e = toError(err);
+                    callSafely(error, e);
+                    if (e.code === 3 && watches.hasOwnProperty(id)) {
+                        /* Safari continue le suivi après un délai dépassé : on le relance. */
+                        var old = watches[id];
+                        try { Promise.resolve(native.clear(old)).catch(function () {}); } catch (_) {}
+                        gpsStats.suivisRelances += 1;
+                        setTimeout(function () {
+                            if (watches.hasOwnProperty(id) && watches[id] === old) startNativeWatch(id, options, success, error);
+                        }, 1000);
+                    }
+                    return;
+                }
+                var p = gotPosition(data);
+                var now = Date.now();
+                if (lastAt) {
+                    gpsStats.intervallesSuiviMs.push(now - lastAt);
+                    if (gpsStats.intervallesSuiviMs.length > 20) gpsStats.intervallesSuiviMs.shift();
+                }
+                lastAt = now;
+                callSafely(success, p);
+            });
+        }
+
         var geolocation = {
             getCurrentPosition: function (success, error, options) {
-                native.once(toOptions(options)).then(function (data) {
+                notePwaOptions(options);
+                gpsStats.appelsPonctuels += 1;
+                var maxAge = options && finite(options.maximumAge) ? Number(options.maximumAge) : 0;
+                if (lastPosition && maxAge > 0 && Date.now() - lastPosition.timestamp <= maxAge) {
+                    gpsStats.reponsesDepuisCache += 1;
+                    var cached = lastPosition;
+                    setTimeout(function () { callSafely(success, cached); }, 0);
+                    return;
+                }
+                native.once(toNativeOptions(options)).then(function (data) {
                     callSafely(success, gotPosition(data));
                 }, function (err) {
                     callSafely(error, toError(err));
                 });
             },
             watchPosition: function (success, error, options) {
+                notePwaOptions(options);
                 var id = nextId++;
-                watches[id] = native.watch(toOptions(options), function (data, err) {
-                    if (!(id in watches)) return;
-                    if (err || !data) {
-                        callSafely(error, toError(err));
-                        return;
-                    }
-                    callSafely(success, gotPosition(data));
-                });
+                startNativeWatch(id, options, success, error);
                 return id;
             },
             clearWatch: function (id) {
-                if (!(id in watches)) return;
+                if (!watches.hasOwnProperty(id)) return;
                 var nativeId = watches[id];
                 delete watches[id];
                 try { Promise.resolve(native.clear(nativeId)).catch(function () {}); } catch (_) {}
@@ -450,11 +517,101 @@
                 enumerable: true,
                 get: function () { return geolocation; }
             });
-            state.gps = navigator.geolocation === geolocation ? 'prêt' : 'remplacement refusé';
+            gpsStats.etat = navigator.geolocation === geolocation ? 'prêt' : 'remplacement refusé';
         } catch (_) {
-            state.gps = 'remplacement impossible';
+            gpsStats.etat = 'remplacement impossible';
         }
     })();
+
+    /*
+     * Essais PC (?npfq400app-sim=1 sur localhost) : imitation du plugin, avec ses
+     * données BRUTES (cap boussole différent de la route, valeurs invalides à -1),
+     * pour vérifier la conversion au format de Safari. Trajet Marignane → nord-ouest,
+     * 60 m/s, route 335°, une position par seconde ; une position sur 5 sans vitesse,
+     * sans route et sans altitude valides.
+     */
+    function makePcSimulatedPlugin() {
+        var n = 0;
+        var t0 = Date.now();
+        function raw() {
+            n += 1;
+            var s = (Date.now() - t0) / 1000;
+            var d = 60 * s;                       /* mètres parcourus */
+            var rad = 335 * Math.PI / 180;
+            var lat = 43.4367 + (d * Math.cos(rad)) / 111320;
+            var lon = 5.2150 + (d * Math.sin(rad)) / (111320 * Math.cos(43.4367 * Math.PI / 180));
+            var invalid = n % 5 === 0;
+            return { timestamp: Date.now(), coords: {
+                latitude: lat, longitude: lon, accuracy: 5,
+                altitude: 300, altitudeAccuracy: invalid ? -1 : 10,
+                speed: invalid ? -1 : 60,
+                course: invalid ? null : 335,
+                heading: 90, trueHeading: 90, magneticHeading: 88, headingAccuracy: 5
+            } };
+        }
+        var timers = {};
+        var next = 1;
+        var sim = {
+            calls: [],
+            once: function (o) { sim.calls.push(['once', o]); return Promise.resolve(raw()); },
+            watch: function (o, cb) {
+                sim.calls.push(['watch', o]);
+                var id = 'sim-' + (next++);
+                setTimeout(function () { cb(raw()); }, 0);
+                timers[id] = setInterval(function () { cb(raw()); }, 1000);
+                return id;
+            },
+            clear: function (id) { clearInterval(timers[id]); delete timers[id]; return Promise.resolve(); }
+        };
+        state.gpsSimulationPc = sim;
+        return sim;
+    }
+
+    /*
+     * Contrôle GPS (DIAG) — seulement en fabrication Debug (simulateur) et en essai PC,
+     * jamais dans l'app livrée : 3 s après le chargement, un suivi de 14 s exactement
+     * comme celui de la PWA (mêmes options), pour mesurer la cadence et les champs reçus.
+     */
+    var gpsCheckWanted = detectedBy === 'simulation-pc' || !!(window.Capacitor && window.Capacitor.DEBUG === true);
+    state.gpsControle = gpsCheckWanted ? 'prévu' : 'non lancé (app livrée)';
+    if (gpsCheckWanted) {
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                if (!navigator.geolocation || typeof navigator.geolocation.watchPosition !== 'function') return;
+                var samples = [];
+                var errors = [];
+                state.gpsControle = 'en cours';
+                var id = navigator.geolocation.watchPosition(function (p) {
+                    samples.push({ at: Date.now(), p: p });
+                }, function (e) {
+                    errors.push(e && e.message);
+                }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 600000 });
+                setTimeout(function () {
+                    navigator.geolocation.clearWatch(id);
+                    var gaps = [];
+                    for (var i = 1; i < samples.length; i++) gaps.push(samples[i].at - samples[i - 1].at);
+                    var sorted = gaps.slice().sort(function (a, b) { return a - b; });
+                    var has = function (k) { return samples.filter(function (s) { return s.p.coords[k] !== null; }).length; };
+                    var last = samples.length ? samples[samples.length - 1].p : null;
+                    state.gpsControle = {
+                        dureeS: 14,
+                        positions: samples.length,
+                        ecartMedianMs: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
+                        ecartMinMs: sorted.length ? sorted[0] : null,
+                        ecartMaxMs: sorted.length ? sorted[sorted.length - 1] : null,
+                        avecVitesse: has('speed'),
+                        avecCap: has('heading'),
+                        avecAltitude: has('altitude'),
+                        avecPrecision: has('accuracy'),
+                        heureEnMs: last ? last.timestamp > 1e12 : null,
+                        retardHeureMs: last ? (samples[samples.length - 1].at - last.timestamp) : null,
+                        derniere: last ? last.toJSON() : null,
+                        erreurs: errors.slice(0, 5)
+                    };
+                }, 14000);
+            }, 3000);
+        }, { once: true });
+    }
 
     /* ---------------------------------------------------------------- 6. PDF */
     /*

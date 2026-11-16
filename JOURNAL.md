@@ -5,6 +5,68 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 16/11/2026 — v0.4 : GPS par le plugin natif, contenu identique au GPS de Safari
+
+### Numéro de version
+- Le commit `edde0de` (GPS par le plugin natif `@capacitor/geolocation`) a été poussé en
+  gardant le numéro 0.3 : erreur reconnue par l'utilisateur. **`edde0de` appartient à la 0.4.**
+  Correction sans réécrire l'historique : ce commit passe l'app en **0.4 (build 4)**.
+  La 0.3 = `e1a89a4` seul (texte d'autorisation de position).
+
+### Comparaison plugin GPS / GPS de Safari (lecture des sources)
+- Safari = WebKit, `GeolocationPositionDataCocoa.mm` et `CoreLocationGeolocationProvider.mm` ;
+  plugin = `@capacitor/geolocation` 8.2.4 + bibliothèque `ion-ios-geolocation` 3.0.0.
+- Déjà identiques : latitude, longitude, précision horizontale (`accuracy`), heure en ms,
+  haute précision = `kCLLocationAccuracyBest`, aucun filtre de distance → même cadence d'iOS
+  (≈ 1 position par seconde).
+- Différents dans le plugin brut, corrigés dans la couche app (section 7) :
+  1. **cap** : le plugin met d'abord la BOUSSOLE de l'iPad (direction où pointe l'iPad) ;
+     Safari donne la ROUTE SUIVIE (`course`). → la couche app prend `course`, vide si invalide ;
+  2. **vitesse** : -1 si invalide dans le plugin → vide (null) comme Safari ;
+  3. **altitude / précision verticale** : transmises même invalides → vides si la précision
+     verticale est invalide, comme Safari ;
+  4. **maximumAge** ignoré par le plugin → la couche app rend la dernière position si elle est
+     assez récente, comme Safari ;
+  5. **suivi + délai dépassé** : le plugin arrêtait le suivi → la couche app transmet l'erreur
+     puis relance le suivi, comme Safari qui continue ;
+  6. **pas de délai donné** : le plugin attendait 5 s → pas de limite (24 h), comme Safari.
+- Haute précision : envoyée au plugin pour CHAQUE appel (le plugin n'a qu'un réglage commun ;
+  une demande ponctuelle sans haute précision aurait dégradé le suivi en cours à 3 km).
+  Différence restante assumée : une demande ponctuelle « basse précision » reçoit la meilleure
+  précision (Safari : 100 m). Toutes les demandes de TEST v17.97 sauf une sont déjà en haute
+  précision.
+- Différence non corrigée : `floorLevel` (étage) de Safari n'existe pas dans le plugin ; la PWA
+  ne l'utilise pas.
+
+### Contrôles
+- Statistiques GPS dans le rapport de démarrage (`gps`) : positions reçues, options demandées,
+  options envoyées au plugin, dernière position, écarts entre positions du suivi.
+- **Contrôle GPS de 14 s** (DIAG) : seulement en fabrication Debug (simulateur) et en essai PC,
+  jamais dans l'app livrée ; 3 s après le chargement, un suivi avec les options de la PWA
+  mesure la cadence et les champs reçus.
+- Simulateur : trajet Marignane → Salon → Avignon à 60 m/s (≈ 117 kt), 1 position par seconde
+  (`simctl location start`), repli sur une position fixe ; résumé GPS lisible dans `bilan.txt`.
+- Essais PC : **31 contrôles sur 31 OK**. Le plugin est imité avec ses données BRUTES
+  (boussole 90°, route 335°, une position sur 5 avec vitesse/route/altitude invalides) :
+  - champs reçus par la PWA : `accuracy, altitude, altitudeAccuracy, heading, latitude,
+    longitude, speed` + `timestamp` en ms ;
+  - position valide : cap 335 (route, pas la boussole 90), vitesse 60, altitude 300 ;
+  - position invalide : cap, vitesse, altitude, précision verticale vides ;
+  - haute précision envoyée au plugin même pour une demande basse précision ; sans délai →
+    86 400 000 ms ;
+  - maximumAge : même position rendue sans nouvel appel au plugin ;
+  - suivi : 6 positions en 5,6 s, écart médian 998 ms, rien après l'arrêt ;
+  - contrôle de 14 s : 15 positions, écart médian 1000 ms (993 à 1011).
+- **non vérifié** : cadence réelle d'iOS sur iPad en vol ; le simulateur dira la cadence du
+  trajet simulé.
+
+### Essai simulateur : quand
+- Ne se lance plus à chaque push : seulement **à la main** ou quand un push **change la
+  version** (champ `version` de `package.json`). Petite tâche Linux de 1 min qui compare la
+  version avant/après le push. La fabrication sans signature reste lancée à chaque push.
+
+---
+
 ## 16/11/2026 — v0.3 : autorisation de position GPS
 
 - Décision de l'utilisateur (« OK push + GPS ») après le constat de la 0.2 : iOS refusait la
@@ -36,7 +98,7 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
   « GPS en attente ». Apple ne fournit aucun moyen public de l'accorder d'office, et la
   question revient à chaque lancement de l'app.
 
-### Correction (même version 0.3, nouveau commit)
+### Correction (commit `edde0de`, poussé sous le numéro 0.3 — appartient en fait à la 0.4)
 - Plugin `@capacitor/geolocation` 8.2.4 (position native iOS).
 - Couche app, section 7 : dans l'app seulement, `navigator.geolocation` est remplacé par un
   équivalent (getCurrentPosition, watchPosition, clearWatch ; même format de position et

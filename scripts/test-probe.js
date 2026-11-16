@@ -164,17 +164,41 @@
                 info.survolee = ((document.getElementById('nearest-commune-display') || {}).textContent || '').trim().slice(0, 80);
                 if (window.NPF_Q400_APP) {
                     try {
-                        var one = await new Promise(function (ok, ko) {
-                            navigator.geolocation.getCurrentPosition(ok, ko, { enableHighAccuracy: true, timeout: 5000 });
-                        });
-                        info.gpsPonctuel = [one.coords.latitude, one.coords.longitude];
-                        var got = 0;
-                        var wid = navigator.geolocation.watchPosition(function () { got += 1; }, function () {}, { enableHighAccuracy: true });
-                        await sleep(2500);
-                        navigator.geolocation.clearWatch(wid);
-                        var after = got;
-                        await sleep(1500);
-                        info.gpsSuivi = { recues: after, apresArret: got - after };
+                        var sim = window.NPF_Q400_APP.gpsSimulationPc;
+                        var g = navigator.geolocation;
+                        var getPos = function (o) {
+                            return new Promise(function (ok, ko) { g.getCurrentPosition(ok, ko, o); });
+                        };
+                        var shape = function (p) {
+                            return { cles: Object.keys(p.coords).sort().join(','), coords: JSON.parse(JSON.stringify(p.coords)),
+                                timestamp: p.timestamp, ageMs: Date.now() - p.timestamp };
+                        };
+                        var callsBefore = sim.calls.length;
+                        var p1 = await getPos({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+                        info.gpsP1 = shape(p1);
+                        var p2 = await getPos({ enableHighAccuracy: true, timeout: 5000, maximumAge: 600000 });
+                        info.gpsCache = { memeHeure: p2.timestamp === p1.timestamp, appelsPlugin: sim.calls.length - callsBefore };
+                        await getPos({ enableHighAccuracy: false, maximumAge: 0 });
+                        info.gpsOptionsPlugin = sim.calls.slice(callsBefore).map(function (c) { return c[0] + ':' + JSON.stringify(c[1]); });
+                        var samples = [];
+                        var wid = g.watchPosition(function (p) { samples.push({ at: Date.now(), p: shape(p) }); }, function () {},
+                            { enableHighAccuracy: true, timeout: 30000, maximumAge: 600000 });
+                        await sleep(5600);
+                        g.clearWatch(wid);
+                        var n = samples.length;
+                        await sleep(1600);
+                        var gaps = [];
+                        for (var i = 1; i < n; i++) gaps.push(samples[i].at - samples[i - 1].at);
+                        gaps.sort(function (x, y) { return x - y; });
+                        info.gpsSuivi = {
+                            recues: n,
+                            apresArret: samples.length - n,
+                            ecartMedianMs: gaps.length ? gaps[Math.floor(gaps.length / 2)] : null,
+                            valides: samples.filter(function (x) { return x.p.coords.speed !== null; }).map(function (x) { return x.p.coords; }),
+                            invalides: samples.filter(function (x) { return x.p.coords.speed === null; }).map(function (x) { return x.p.coords; })
+                        };
+                        info.gpsControle = window.NPF_Q400_APP.gpsControle;
+                        info.gpsStats = JSON.parse(JSON.stringify(window.NPF_Q400_APP.gpsStats));
                     } catch (x) { info.gpsErreur = String(x && x.message || x); }
                 }
                 step('pdf');
