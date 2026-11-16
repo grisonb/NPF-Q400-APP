@@ -125,9 +125,28 @@ for ORIENT in paysage portrait; do
     xcrun simctl location "$UDID" set 43.4367,5.2150 > /dev/null 2>&1 || say "position simulée : impossible"
   fi
   CONSOLE="$OUT/console-app-$ORIENT.log"
-  xcrun simctl launch --console-pty --terminate-running-process "$UDID" "$BUNDLE_ID" > "$CONSOLE" 2>&1 &
-  LAUNCH_PID=$!
-  T0=$(date +%s)
+  app_running() { xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID"; }
+  # Lancement, vérifié : sur un Mac GitHub très chargé, « simctl launch » peut rester
+  # bloqué sans ouvrir l'app (vu le 16/11, portrait de la 0.4). Si l'app ne tourne pas
+  # au bout de 20 s, on la relance une fois et on le note dans le bilan.
+  LAUNCH_PID=""
+  for attempt in 1 2; do
+    xcrun simctl launch --console-pty --terminate-running-process "$UDID" "$BUNDLE_ID" >> "$CONSOLE" 2>&1 &
+    LAUNCH_PID=$!
+    T0=$(date +%s)
+    started=0
+    for _ in $(seq 1 20); do
+      if app_running; then started=1; break; fi
+      sleep 1
+    done
+    if [ "$started" = 1 ]; then
+      say "app démarrée (lancement n° $attempt, en $(( $(date +%s) - T0 )) s)"
+      break
+    fi
+    say "app NON démarrée 20 s après le lancement n° $attempt"
+    kill "$LAUNCH_PID" > /dev/null 2>&1 || true
+    sleep 3
+  done
   for at in 10 25 40; do
     while [ $(( $(date +%s) - T0 )) -lt "$at" ]; do sleep 1; done
     SHOT="$OUT/capture-$ORIENT-${at}s.png"

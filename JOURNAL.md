@@ -5,6 +5,38 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 16/11/2026 — v0.4 : résultats GitHub et recette simulateur plus robuste
+
+### Runs du commit `edde0de` (GPS natif, appartient à la 0.4)
+- Fabrication sans signature : **échec sans rapport avec l'app** (run 43946247610) : GitHub n'a
+  trouvé aucun Mac libre en 15 min (« capacity constraints… macOS arm64 ») et a annulé le travail
+  avant son début. Non relancé : la 0.4 (`59ca3f1`) contient ce code et a été fabriquée.
+- Essai simulateur : **vert** (run 43946247624). Plus de seconde question « localhost » ; la PWA
+  reçoit la position (Marignane fixe) ; « Survolée : Marignane (13) » ; carte centrée.
+  **VALIDÉ (simulateur)**.
+
+### Runs de la 0.4 (`59ca3f1`)
+- Fabrication sans signature : **verte** (run 43948993951, 20:21 → 20:33 UTC, dont l'attente d'un Mac).
+- Essai simulateur : **vert** (run 43948994076, 20:21 → 20:41 UTC), iPad (9th generation), iOS 26.5.
+  - **Paysage** : trajet simulé Marignane → Salon à 60 m/s. Contrôle GPS de 14 s :
+    **15 positions, écart médian 1010 ms** (min 565, max 1053) ; vitesse présente 15/15 (60 m/s) ;
+    cap présent 15/15 (329°, route suivie vers Salon) ; précision 15/15 ; heure en ms, reçue
+    45 ms après la mesure ; altitude vide 15/15 (le trajet simulé d'iOS ne donne pas d'altitude
+    valide : Safari la laisserait vide aussi) ; aucune erreur. Options envoyées au plugin :
+    haute précision, délai 30 s. Le tracé jaune du trajet s'affiche sur la carte. **VALIDÉ (simulateur)**.
+  - « Survolée : non déterminée » pendant le trajet : texte de la PWA quand la position n'est dans
+    aucune commune connue ; la dernière position (43,456 N 5,199 E) est au-dessus de l'étang de
+    Berre — explication probable, **non vérifiée**. Comportement de TEST, pas de l'app.
+  - **Portrait : l'app ne s'est pas ouverte**. L'icône « NPF-Q400 APP » (icône de la PWA) est
+    bien sur l'écran d'accueil, mais `simctl launch` est resté bloqué sans lancer l'app (aucune
+    ligne de console, pas de plantage). Mac GitHub très chargé ce soir-là (6 min pour démarrer
+    un simulateur). **À REVOIR** : relancer l'essai.
+- Correction de la recette (`scripts/sim-test.sh`) : après chaque lancement, vérification que
+  l'app tourne ; sinon, 2e lancement au bout de 20 s, noté dans le bilan. Version de l'app
+  inchangée (0.4) : ce push ne lance pas l'essai simulateur ; il sera lancé à la main.
+
+---
+
 ## 16/11/2026 — v0.4 : GPS par le plugin natif, contenu identique au GPS de Safari
 
 ### Numéro de version
