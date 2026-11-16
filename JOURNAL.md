@@ -5,6 +5,25 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 16/11/2026 — v0.1 : première fabrication GitHub sans signature — VALIDÉ
+
+- Premier push (commit `a628705`) après « OK push ». Avertissement GitHub attendu :
+  `communes.json` 59 Mo (> 50 Mo recommandés, < 100 Mo limite).
+- Run https://github.com/grisonb/NPF-Q400-APP/actions/runs/43913369604 : **vert**,
+  16:58:36 → 17:00:01 UTC, soit environ **1,5 minute**. Mac macOS 26.7.2, Xcode 26.6.
+- `** BUILD SUCCEEDED **` ; un seul avertissement, sans conséquence (AppIntents non utilisé).
+- Artefact `NPF-Q400-APP-0.1-non-signe` (24,7 Mo, conservé jusqu'au 16/12/2026) :
+  `.ipa` non signé + journal `xcodebuild`. Téléchargé et contrôlé sur le PC :
+  nom « NPF-Q400 APP », `com.grisonb.npfq400app`, version 0.1 (build 1), iPad seul
+  (`UIDeviceFamily = [2]`), 4 orientations, iOS 15 minimum, `public/index.html`
+  contient bien la couche app (base v17.97). Pas de signature (normal).
+- **non vérifié** : lancement de l'app (ni simulateur, ni iPad) ; le `.ipa` non signé ne
+  peut pas être installé sur un iPad.
+- Profils Chrome temporaires des essais PC laissés dans `C:\Windows\Temp\npfq400app-essai-*`
+  (non supprimés, pour ne rien toucher sous `/mnt`).
+
+---
+
 ## 16/11/2026 — v0.1 : création du projet (sans compte Apple, sans signature)
 
 ### Base
