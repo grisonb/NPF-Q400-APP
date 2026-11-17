@@ -5,6 +5,24 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 17/11/2026 — v0.5.2 : résultats GitHub — VALIDÉ (simulateur)
+
+- Fabrication sans signature **verte** (run 44163228950, ≈ 2 min) ; essai simulateur **vert**
+  (run 44163228909, 19:52 → 20:17 UTC), iPad (9th generation), iOS 26.5.
+- Paysage / portrait : démarrage automatique en vol (73 points d'avant), arrêt automatique ≈ 2 min
+  après le ralentissement, 0 trou ; arrière-plan 41 points en 40 s / 51 points en 50 s (écart
+  maxi 1 s), reprise du journal natif 17 / 47 points ; GPX XML valide ; aucune erreur console.
+- **Doublons corrigés** : en portrait, iOS a de nouveau annulé une écriture au passage en
+  arrière-plan (« lot écrit : oui ») → points non réécrits ; GPX = trace : 282 / 282 et 290 / 290
+  points. Les 1 ou 2 heures identiques restantes dans un GPX sont deux points RÉELS reçus dans la
+  même seconde (le GPX écrit l'heure à la seconde). **À DÉCIDER** : écrire les millisecondes dans
+  le GPX (format autorisé par GPX 1.1).
+- Paysage : « app toujours lancée à la fin : NON » après la fenêtre de partage ; le journal système
+  ne montre ni plantage ni fermeture (dernières lignes normales 2 s après l'ouverture du partage) →
+  probablement la vérification `launchctl` ratée sur un Mac très chargé. **non vérifié**.
+
+---
+
 ## 17/11/2026 — v0.5.2 : pas de point en double si iOS suspend l'app pendant une écriture
 
 ### Runs de la 0.5.1 (`51de352`)
