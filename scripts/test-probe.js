@@ -360,6 +360,14 @@
                         it.messageReprise = (TR.messages[TR.messages.length - 1] || {}).texte || '';
                         it.enregistrementApresReprise = TR.enregistrement;
 
+                        /* 6 bis. iPad immobile : plus aucun point après le début de l'atterrissage → arrêt à l'horloge */
+                        var bE = Date.now() - 300000;
+                        var Ev = gen(bE, [{ d: 20, kt: 10 }, { d: 100, kt: 120 }, { d: 30, kt: 15 }]);
+                        X.injecter(Ev.pts);
+                        it.volE_enregistreSansPointsRecents = TR.enregistrement === true;
+                        it.volE_arreteHorloge = X.verifierArret() === false;
+                        await X.sauver();
+
                         /* 7. Relancement pendant un vol récent : la trace continue */
                         var b7 = Date.now() - 100000;
                         var D = gen(b7, [{ d: 20, kt: 10 }, { d: 80, kt: 120 }]);

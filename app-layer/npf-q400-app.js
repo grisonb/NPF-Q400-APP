@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 APP — couche « app » (version 0.5).
+ * NPF-Q400 APP — couche « app » (version 0.5.1).
  *
  * Ce fichier n'appartient PAS au code NPF-Q400 TEST. Il est ajouté par
  * scripts/build-www.mjs en tout premier dans <head> de www/index.html,
@@ -26,7 +26,7 @@
 (function npfQ400AppLayer() {
     'use strict';
 
-    var LAYER_VERSION = '0.5';
+    var LAYER_VERSION = '0.5.1';
     var BASE_VERSION = '__NPF_Q400_BASE_VERSION__';
 
     function detectApp() {

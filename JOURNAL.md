@@ -5,6 +5,55 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 17/11/2026 — v0.5.1 : arrêt automatique à l'horloge, recette simulateur corrigée
+
+### Runs de la 0.5 (`ac4fccc`)
+- 1re tentative : fabrication ET essai simulateur **non démarrés** : GitHub n'a trouvé aucun Mac
+  arm64 libre en 15 min (même message qu'au 16/11). Relancés sans changement de code.
+- 2e tentative : fabrication sans signature **verte** (run 44136435934) ; essai simulateur de
+  nouveau sans Mac → relancé. 3e tentative : essai simulateur **vert** (run 44136436010,
+  18:01 → 18:30 UTC), iPad (9th generation), iOS 26.5.
+- Résultats (paysage / portrait) :
+  - démarrage automatique en vol, avec les minutes d'avant (72 / 136 points) ;
+  - **arrière-plan** (Réglages d'iOS devant l'app) : 56 points en 56 s / 39 points en 38 s dans
+    le GPX, plus grand écart 2 s. Au retour, 107 / 7 points repris du journal natif : la page
+    était endormie, le journal a tout gardé. **VALIDÉ (simulateur)** ;
+  - GPX écrit, XML valide (`xmllint`), 312 / 319 points, vitesse présente, altitude absente
+    (le simulateur ne donne pas d'altitude valide ; Safari la laisserait vide aussi) ;
+  - fenêtre de partage iPad ouverte avec `NPF-Q400_trace_….gpx` (77 Ko), « Copier »,
+    « Enregistrer dans Fichiers » ; fenêtre Réglages Trace et liste affichées ; bouton rouge ;
+  - **défaut 1 : pas d'arrêt automatique.** Position fixe à l'arrêt → iOS n'envoie plus aucun
+    point → le moteur, qui ne décidait qu'à l'arrivée d'un point, n'a jamais conclu. La liste
+    montre la trace toujours « en cours » ;
+  - **défaut 2 (essai)** : la fenêtre « Télécharger cartes VAC » de la PWA (1er lancement)
+    floute toutes les captures ; le trait n'est pas lisible ;
+  - **défaut 3 (essai)** : « erreurs » `readFile … npfq400-essai.json does not exist` dans la
+    console : le fichier d'ordres d'essai n'existait pas encore (sans effet sur l'app) ;
+  - portrait : l'app s'est fermée normalement (« exit handler », aucun plantage dans le journal
+    système) environ 8 s après l'ouverture de la fenêtre de partage, en fin d'essai. Cause
+    **non vérifiée** (paysage : pas de fermeture) ;
+  - portrait : une erreur ponctuelle du GPS de la carte au démarrage (« There was an error trying
+    to obtain the location. », `OS-PLUG-GLOC-0002`) pendant le changement de position simulée ;
+    la PWA l'a traitée normalement.
+
+### Corrections (0.5.1, build 6)
+- Arrêt automatique vérifié aussi **à l'horloge** toutes les 5 s : atterrissage commencé (vitesse
+  sous la vitesse d'arrêt), aucun point depuis 10 s, journal natif déjà repris, durée d'arrêt
+  écoulée → arrêt. Même chose pour le réarmement après un arrêt à la main. En vol, sans points
+  (GPS perdu à grande vitesse), rien ne s'arrête.
+- Essai PC ajouté : vol dont les derniers points lents datent de 150 s → arrêt à l'horloge.
+  **52 contrôles sur 52 OK.**
+- Recette simulateur : fichier d'ordres créé avant le lancement ; ordre « non-vac » (répond
+  « Non » à « Télécharger cartes VAC », fabrication Debug seulement) à t+27 s et au retour au
+  premier plan.
+- `patch-package` remplacé par `scripts/patch-plugins.mjs` (même correctif « avion », aucune
+  dépendance) : `npm audit` signalait 4 alertes « élevées » dans `picomatch`, dépendance de
+  `patch-package` (outil d'installation seulement, jamais dans l'app), sans version corrigée
+  compatible. Maintenant : 0 alerte.
+- Version 0.5.1 (correction de la 0.5) : tous les numéros changés ensemble.
+
+---
+
 ## 17/11/2026 — v0.5 : enregistrement automatique de la trace de vol
 
 Base inchangée : NPF-Q400 TEST v17.97 (`web-test/` identique). Version 0.5 (build 5), tous les
@@ -16,7 +65,7 @@ numéros changés ensemble.
   (`NSLocationAlwaysAndWhenInUseUsageDescription`, en français), mode arrière-plan `location`.
 - **Type d'activité « avion »** : le plugin ne permet pas de le régler → correctif d'une ligne
   (`patches/@capgo+background-geolocation+8.6.4.patch`, option `activityType: 'airborne'`),
-  appliqué automatiquement à chaque `npm ci` par `patch-package` (script `postinstall`).
+  appliqué automatiquement à chaque `npm ci` par `patch-package` (script `postinstall`) — remplacé en 0.5.1 par `scripts/patch-plugins.mjs`.
   Pause automatique d'iOS : déjà désactivée par le plugin. Précision : la meilleure d'iOS
   (« navigation » si l'iPad est branché).
 

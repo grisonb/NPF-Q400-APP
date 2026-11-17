@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 APP — enregistrement de la trace de vol (version 0.5).
+ * NPF-Q400 APP — enregistrement de la trace de vol (version 0.5.1).
  *
  * Fichier ajouté par scripts/build-www.mjs juste après npf-q400-app.js. Il ne fait RIEN
  * hors de l'app (pas de window.NPF_Q400_APP) : dans un navigateur normal, le bouton TRACE
@@ -30,7 +30,7 @@
     var APP = window.NPF_Q400_APP;
     if (!APP || !APP.isApp) return; /* navigateur normal : rien */
 
-    var VERSION = '0.5';
+    var VERSION = '0.5.1';
     var cap = window.Capacitor;
     var NATIVE = !!(cap && typeof cap.nativePromise === 'function' && typeof cap.nativeCallback === 'function');
     var SIM = APP.detectedBy === 'simulation-pc';
@@ -427,6 +427,26 @@
     }
     /* filet de sécurité : sauvegarde au moins toutes les 15 s (horloge), même si les points tardent */
     setInterval(function () { if (E.trace) sauver(false); }, 15000);
+
+    /* Arrêt (et réarmement) aussi à l'HORLOGE : iPad immobile au parking, iOS peut ne plus
+     * envoyer aucune position (vu dans le simulateur, 0.5). Seulement si l'atterrissage a
+     * commencé (vitesse sous la vitesse d'arrêt), si aucun point n'est arrivé depuis 10 s et
+     * si le journal natif a été repris (sinon on attend : des points peuvent y être). */
+    function verifierArretHorloge() {
+        if (enAttenteDeRattrapage || rattrapageEnCours) return;
+        if (E.enDessousDepuis === null) return;
+        var maintenant = Date.now();
+        if (maintenant - E.dernierT < 10000) return;
+        if (maintenant - E.enDessousDepuis < R.dureeArretMin * 60000) return;
+        if (E.trace && E.trace.aVole) {
+            log('arret-horloge', { silenceS: Math.round((maintenant - E.dernierT) / 1000) });
+            arreter('auto');
+        } else if (!E.trace && !E.autoPermis) {
+            E.autoPermis = true;
+            log('rearme', { horloge: true });
+        }
+    }
+    setInterval(verifierArretHorloge, 5000);
 
     /* =========================================================== source native */
     var journalId = 0;
@@ -1252,6 +1272,12 @@
                 });
             });
         }
+        if (a === 'non-vac') {
+            /* fenêtre « Télécharger cartes VAC » de la PWA au premier lancement : « Non » */
+            var non = document.getElementById('vac-update-later-button');
+            if (non && non.offsetParent !== null) { non.click(); return Promise.resolve(true); }
+            return Promise.resolve(false);
+        }
         if (a === 'demarrer') { demarrer('manuel'); return Promise.resolve(true); }
         if (a === 'diag') { log('diag', { lignes: lignesDiag() }); return Promise.resolve(true); }
         return Promise.resolve(false);
@@ -1284,6 +1310,7 @@
             ordre: executerOrdre,
             traitMorceaux: function () { return trait.morceaux.map(function (l) { return { n: l.getLatLngs().length, color: l.options.color, weight: l.options.weight, pane: l.options.pane }; }); },
             /* relancement simulé : nouvelle lecture d'IndexedDB comme après un arrêt brutal */
+            verifierArret: function () { verifierArretHorloge(); return T.enregistrement; },
             relancer: function () {
                 E.trace = null; E.tampon = []; E.dernierT = 0; E.prec = null; E.attente = [];
                 E.auDessusDepuis = null; E.enDessousDepuis = null; E.autoPermis = true;

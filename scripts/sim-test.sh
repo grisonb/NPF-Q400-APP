@@ -113,6 +113,11 @@ for ORIENT in paysage portrait; do
   /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PL"
 
   xcrun simctl install "$UDID" "$COPY"
+  # Fichier d'ordres d'essai créé AVANT le lancement (sinon l'app, qui le lit toutes les
+  # 2 s en fabrication Debug, note une erreur « fichier absent » à chaque lecture).
+  DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null || true)
+  mkdir -p "$DATA/Documents" 2>/dev/null || true
+  printf '{"seq":0,"action":"aucune"}' > "$DATA/Documents/npfq400-essai.json" 2>/dev/null || say "fichier d'ordres d'essai : impossible"
   # GPS : autorisation « Toujours » accordée d'avance (pas de fenêtre système), position
   # fixe au parking de Marignane au lancement.
   xcrun simctl privacy "$UDID" grant location-always "$BUNDLE_ID" > /dev/null 2>&1 \
@@ -143,8 +148,6 @@ for ORIENT in paysage portrait; do
     kill "$LAUNCH_PID" > /dev/null 2>&1 || true
     sleep 3
   done
-  DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null || true)
-  mkdir -p "$DATA/Documents" 2>/dev/null || true
   PHASES="$OUT/phases-$ORIENT.txt"
   : > "$PHASES"
   attendre() { while [ $(( $(date +%s) - T0 )) -lt "$1" ]; do sleep 1; done; }
@@ -173,6 +176,9 @@ for ORIENT in paysage portrait; do
 
   attendre 10; capture "10s"
   attendre 25; capture "25s"
+  # la PWA demande « Télécharger cartes VAC » au premier lancement : réponse « Non » (sinon
+  # cette fenêtre floute toutes les captures suivantes)
+  attendre 27; ordre non-vac
   # roulage 5 m/s (≈ 10 kt)
   attendre 30; phase roulage "roulage à 5 m/s (≈ 10 kt)"; TS=$(date +%s); route 5 "$P0"
   # décollage et vol 70 m/s (≈ 136 kt) : la trace doit démarrer ≈ 30 s plus tard
@@ -183,6 +189,7 @@ for ORIENT in paysage portrait; do
   attendre 120; phase arriere-plan "app en arrière-plan (Réglages d'iOS ouverts)"; xcrun simctl launch "$UDID" com.apple.Preferences > /dev/null 2>&1 || say "ouverture de Réglages impossible"
   attendre 150; capture "arriere-plan" systeme
   attendre 180; phase premier-plan "retour de l'app au premier plan"; xcrun simctl launch "$UDID" "$BUNDLE_ID" > /dev/null 2>&1 || say "retour de l'app impossible"
+  attendre 185; ordre non-vac
   attendre 188; ordre cadrer
   attendre 195; capture "retour-premier-plan"
   # ralentissement 12 m/s (≈ 23 kt) : la trace doit s'arrêter ≈ 2 min plus tard
