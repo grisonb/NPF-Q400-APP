@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 APP — enregistrement de la trace de vol (version 0.5.1).
+ * NPF-Q400 APP — enregistrement de la trace de vol (version 0.5.2).
  *
  * Fichier ajouté par scripts/build-www.mjs juste après npf-q400-app.js. Il ne fait RIEN
  * hors de l'app (pas de window.NPF_Q400_APP) : dans un navigateur normal, le bouton TRACE
@@ -30,7 +30,7 @@
     var APP = window.NPF_Q400_APP;
     if (!APP || !APP.isApp) return; /* navigateur normal : rien */
 
-    var VERSION = '0.5.1';
+    var VERSION = '0.5.2';
     var cap = window.Capacitor;
     var NATIVE = !!(cap && typeof cap.nativePromise === 'function' && typeof cap.nativeCallback === 'function');
     var SIM = APP.detectedBy === 'simulation-pc';
@@ -195,6 +195,13 @@
                 lots = (lots || []).sort(function (a, b) { return a.seq - b.seq; });
                 var pts = [];
                 lots.forEach(function (l) { for (var i = 0; i < l.pts.length; i++) pts.push(l.pts[i]); });
+                /* dans l'ordre des heures, sans doublon (sécurité : un même point écrit deux fois) */
+                pts.sort(function (a, b) { return a[0] - b[0]; });
+                var uniques = [];
+                for (var j = 0; j < pts.length; j++) {
+                    if (!uniques.length || pts[j][0] > uniques[uniques.length - 1][0]) uniques.push(pts[j]);
+                }
+                pts = uniques;
                 return { pts: pts, dernierSeq: lots.length ? lots[lots.length - 1].seq : -1 };
             });
     }
@@ -409,18 +416,29 @@
         metaModifiee = false;
         var meta = JSON.parse(JSON.stringify(tr));
         meta.maj = Date.now();
+        var lotEcrit = !pts.length;
         E.sauvegarde = E.sauvegarde.then(function () {
-            return (pts.length ? ajouterLot(tr.id, seq, pts) : Promise.resolve()).then(function () { return sauverMeta(meta); });
+            return (pts.length ? ajouterLot(tr.id, seq, pts) : Promise.resolve()).then(function () {
+                lotEcrit = true;
+                if (SIM && T.test && T.test.echecFicheUneFois) { T.test.echecFicheUneFois = false; throw new Error('échec simulé de la fiche'); }
+                return sauverMeta(meta);
+            });
         }).then(function () {
             T.derniereSauvegarde = { t: Date.now(), points: pts.length, total: meta.points };
             if (pts.length) log('lot', { trace: tr.id, seq: seq, points: pts.length, total: meta.points });
         }).catch(function (e) {
             T.erreurSauvegarde = String(e && e.message || e);
-            log('erreur-sauvegarde', { message: T.erreurSauvegarde });
-            /* on remet les points en tête de file pour un nouvel essai */
-            if (pts.length && E.trace && E.trace.id === tr.id) {
+            log('erreur-sauvegarde', { message: T.erreurSauvegarde, lotEcrit: lotEcrit });
+            if (!lotEcrit && pts.length && E.trace && E.trace.id === tr.id) {
+                /* le lot n'a pas été écrit : ses points repartent en tête de file */
                 E.attente = pts.concat(E.attente);
-                E.seq = Math.min(E.seq, seq);
+            } else if (E.trace && E.trace.id === tr.id) {
+                /* lot écrit, seule la fiche a échoué (ex. iOS a suspendu l'app) : on ne
+                 * réécrit pas les points (doublons, vus en 0.5.1), on refera la fiche */
+                metaModifiee = true;
+            } else if (lotEcrit) {
+                /* trace déjà close : on retente la fiche seule */
+                E.sauvegarde = E.sauvegarde.then(function () { return sauverMeta(meta); }).catch(function () {});
             }
         });
         return E.sauvegarde;
@@ -1311,6 +1329,8 @@
             traitMorceaux: function () { return trait.morceaux.map(function (l) { return { n: l.getLatLngs().length, color: l.options.color, weight: l.options.weight, pane: l.options.pane }; }); },
             /* relancement simulé : nouvelle lecture d'IndexedDB comme après un arrêt brutal */
             verifierArret: function () { verifierArretHorloge(); return T.enregistrement; },
+            ajouterLotBrut: function (traceId, seq, pts) { return ajouterLot(traceId, seq, pts); },
+            echecFicheUneFois: false,
             relancer: function () {
                 E.trace = null; E.tampon = []; E.dernierT = 0; E.prec = null; E.attente = [];
                 E.auDessusDepuis = null; E.enDessousDepuis = null; E.autoPermis = true;

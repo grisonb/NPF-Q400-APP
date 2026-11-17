@@ -11,7 +11,7 @@ But final : enregistrer la trace de vol automatiquement en arrière-plan.
 - Identifiant d'app : `com.grisonb.npfq400app` — nom affiché : « NPF-Q400 APP ».
 - iPad uniquement (`TARGETED_DEVICE_FAMILY = 2`), 4 orientations (comme la PWA,
   dont le manifest n'impose aucune orientation).
-- Version de l'app : **0.5.1** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
+- Version de l'app : **0.5.2** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
   `project.pbxproj`, `package.json`, `LAYER_VERSION` dans `app-layer/`).
 - Icône de l'app = icône de la PWA (`icons/icon-512x512.png` du manifest), refaite par
   `node scripts/make-icon.mjs` (1024 px, sans transparence).

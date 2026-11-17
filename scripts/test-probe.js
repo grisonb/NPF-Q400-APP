@@ -381,6 +381,25 @@
                         it.volD_arrete = TR.enregistrement === false;
                         await X.sauver();
 
+                        /* 7 bis. Lot écrit mais fiche en échec (iOS suspend l'app) : pas de point en double ;
+                         *        et un même point écrit deux fois n'est lu qu'une fois */
+                        var bF = Date.now() + 3600000;
+                        var Fv = gen(bF, [{ d: 130, kt: 10 }, { d: 60, kt: 120 }]); /* 130 s au sol : réarmement après l arrêt à la main du vol D */
+                        X.injecter(Fv.pts);
+                        var idF = TR.traceEnCours ? TR.traceEnCours.id : null;
+                        X.echecFicheUneFois = true;
+                        await X.sauver();
+                        var Fv2 = gen(Fv.fin, [{ d: 40, kt: 120 }]);
+                        X.injecter(Fv2.pts);
+                        await X.sauver();
+                        var lusF = await X.lirePoints(idF);
+                        await X.ajouterLotBrut(idF, 999, lusF.pts.slice(0, 10));
+                        var lusF2 = await X.lirePoints(idF);
+                        var attendusF = TR.traceEnCours ? TR.traceEnCours.points : null;
+                        it.volF = { attendus: attendusF, lus: lusF.pts.length, lusApresDoublons: lusF2.pts.length,
+                            erreurNotee: /échec simulé/.test(TR.erreurSauvegarde || '') };
+                        await appuyer(80);
+
                         /* 8. GPX du vol A */
                         var g = await X.gpx(trA.id);
                         var doc = new DOMParser().parseFromString(g.texte, 'application/xml');

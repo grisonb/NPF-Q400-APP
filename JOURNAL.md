@@ -5,6 +5,35 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 17/11/2026 — v0.5.2 : pas de point en double si iOS suspend l'app pendant une écriture
+
+### Runs de la 0.5.1 (`51de352`)
+- Fabrication sans signature **verte** (run 44154945042, ≈ 2 min) ; essai simulateur **vert**
+  (run 44154945011, 19:06 → 19:32 UTC), iPad (9th generation), iOS 26.5, Mac trouvé du premier coup.
+- **Arrêt automatique** : 122 s (paysage) / 123 s (portrait) après le début du ralentissement à
+  23 kt. **VALIDÉ (simulateur)**.
+- Démarrage automatique en vol, minutes d'avant gardées (53 / 59 points) ; arrière-plan :
+  31 points en 26 s / 44 points en 43 s, plus grand écart 2 s ; reprises du journal natif 9 / 22
+  points. GPX valide (`xmllint`). Aucune erreur dans la console ; app lancée jusqu'à la fin dans
+  les deux orientations (la fermeture vue en portrait en 0.5 ne s'est pas reproduite).
+- Captures nettes (fenêtre VAC écartée) : bouton rouge et trait bleu foncé en vol ; bouton gris
+  et trace complète après l'arrêt ; Réglages Trace (valeurs par défaut, 7 couleurs, aperçu) ;
+  liste « 17/11/2026 · 19:24Z · 5 min · 278 points » avec Affichée / Exporter (GPX) /
+  Supprimer ; fenêtre de partage du GPX. Le petit crochet en haut du trait vient du trajet
+  simulé (changement de vitesse avec une position recalculée), pas de l'app.
+- **Défaut** : en paysage, au moment exact du passage en arrière-plan, iOS a annulé une écriture
+  (« transaction annulée ») ; le lot de points était pourtant écrit, seule la fiche de la trace
+  a échoué ; l'app a réécrit les points → GPX de 304 points dont 5 en double (299 réels).
+
+### Correction (0.5.2, build 7)
+- Si le lot est écrit et que seule la fiche échoue : les points ne sont plus réécrits, la fiche
+  est refaite au lot suivant (ou seule, si la trace est déjà close).
+- À la lecture d'une trace (affichage, GPX, reprise) : points remis dans l'ordre des heures, un
+  point de même heure n'est gardé qu'une fois (corrige aussi d'éventuels doublons déjà écrits).
+- Essai PC ajouté (échec simulé de la fiche + lot volontairement en double). **53 contrôles sur 53 OK.**
+
+---
+
 ## 17/11/2026 — v0.5.1 : arrêt automatique à l'horloge, recette simulateur corrigée
 
 ### Runs de la 0.5 (`ac4fccc`)
