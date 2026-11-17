@@ -68,7 +68,7 @@ function runPage(label, dir, query, profile) {
                 res.writeHead(404); res.end('404');
             }
         });
-        const guard = setTimeout(() => done(null, new Error(`${label} : pas de bilan après ${WAIT_MS + 90000} ms`)), WAIT_MS + 90000);
+        const guard = setTimeout(() => done(null, new Error(`${label} : pas de bilan après ${WAIT_MS + 240000} ms`)), WAIT_MS + 240000);
         server.listen(0, '127.0.0.1', () => {
             const port = server.address().port;
             chrome = spawn(CHROME, [
@@ -125,6 +125,27 @@ const checks = [
     ['C : GPS — suivi ≈ 1 position par seconde, plus rien après l\'arrêt', !!c.gpsSuivi && c.gpsSuivi.recues >= 5 && c.gpsSuivi.ecartMedianMs >= 900 && c.gpsSuivi.ecartMedianMs <= 1150 && c.gpsSuivi.apresArret === 0],
     ['C : GPS — contrôle de 14 s de la couche app (cadence, vitesse, cap, altitude)', !!c.gpsControle && c.gpsControle.positions >= 12 && c.gpsControle.ecartMedianMs >= 900 && c.gpsControle.ecartMedianMs <= 1150 && c.gpsControle.avecVitesse >= 1 && c.gpsControle.avecCap >= 1 && c.gpsControle.avecAltitude >= 1 && c.gpsControle.heureEnMs === true && c.gpsControle.erreurs.length === 0],
     ['C : GPS — aucune erreur GPS', !!c.gpsStats && c.gpsStats.erreurs === 0],
+    // 0.5 — trace de vol
+    ['B : trace inactive en navigateur normal (bouton TRACE de TEST, pas de liste, DIAG et téléchargements intacts)', !!b.traceNavigateur && b.traceNavigateur.module === false && b.traceNavigateur.sectionListe === false && b.traceNavigateur.boutonLieParTest === '1' && !/npfq400/.test(b.traceNavigateur.boutonClasses) && b.traceNavigateur.clicAncreNatif === true && b.traceNavigateur.diagSansTrace === true && same(a.traceNavigateur, b.traceNavigateur)],
+    ['C : trace — module prêt, bouton gris au départ', !!c.trace && !c.trace.erreur && c.trace.etatInitial === 'prêt' && /npfq400-trace-off/.test(c.trace.boutonInitial)],
+    ['C : trace — appui long : « Réglages Trace » avec les valeurs par défaut (50 kt, 30 s, 30 kt, 2 min, 2 min, 4 px, bleu foncé, 7 couleurs)', !!c.trace && c.trace.reglagesOuverts === true && same(c.trace.reglagesDefaut, [50, 30, 30, 2, 2, 4]) && c.trace.couleurChoisieDefaut === '#1e3a8a' && c.trace.paletteCouleurs === 7],
+    ['C : trace — réglages modifiés mémorisés, puis « Valeurs par défaut »', !!c.trace && c.trace.reglagesApres && c.trace.reglagesApres.vitesseDemarrageKt === 60 && c.trace.reglagesApres.couleur === '#6d28d9' && c.trace.reglagesApres.epaisseur === 6 && same(c.trace.reglagesRemisDefaut, { vitesseDemarrageKt: 50, dureeDemarrageS: 30, vitesseArretKt: 30, dureeArretMin: 2, minutesAvant: 2, couleur: '#1e3a8a', epaisseur: 4 })],
+    ['C : trace — le bouton n\'ouvre plus Raccourcis', !!c.trace && c.trace.raccourciTestPasLance === true],
+    ['C : trace — appui court : démarrage à la main (bouton rouge), arrêt avec confirmation (bouton gris), trace vide non gardée', !!c.trace && c.trace.manuelDemarre === true && c.trace.manuelArrete === true && c.trace.traceVideSupprimee === true],
+    ['C : trace — vol complet : 1 trace, début 2 min avant le passage à 50 kt, fin 2 min après le passage sous 30 kt', !!c.trace && !!c.trace.volA && c.trace.volA.une === 1 && c.trace.volA.mode === 'auto' && c.trace.volA.etat === 'terminée' && c.trace.volA.debutApresBase_s === 60 && c.trace.volA.finApresBase_s === 1445],
+    ['C : trace — remise de gaz (40 kt) et écopage (75 kt) n\'arrêtent pas la trace ; trou de 45 s signalé', !!c.trace && !!c.trace.volA && c.trace.volA.points === 1341 && c.trace.volA.trous === 1 && c.trace.volA_pointsLus === 1341],
+    ['C : trace — vitesse calculée quand le GPS ne la donne pas (300 points) ; route enregistrée', !!c.trace && c.trace.volA_vitesseCalculee === 300 && c.trace.volA_capRoute === 1341],
+    ['C : trace — arrêt à la main en vol : pas de redémarrage avant l\'atterrissage, puis redémarrage et arrêt automatiques', !!c.trace && c.trace.volB_demarre && c.trace.volB_pasRedemarreEnVol && c.trace.volB_redemarreApresAtterrissage && c.trace.volB_arreteAuto],
+    ['C : trace — mémoire bornée (tampon 2 min ≈ 160 points, ≤ 30 points en attente) et rapide (< 1 ms par point)', !!c.trace && c.trace.tamponApresRoulage <= 170 && c.trace.tamponApresRoulage >= 140 && c.trace.enAttenteMax <= 30 && c.trace.msParPoint < 1 && c.trace.msParPointVol1h < 1],
+    ['C : trace — points enregistrés par lots d\'au plus 30 s', !!c.trace && !!c.trace.lotsC && c.trace.lotsC.points === c.trace.pointsTraceC && c.trace.lotsC.lots >= Math.ceil(c.trace.pointsTraceC / 30)],
+    ['C : trace — trait sur la carte par morceaux (≤ 150 points), allégé, couleur et épaisseur des réglages', !!c.trace && c.trace.morceauxTrait.length >= 2 && c.trace.morceauxTrait.every(m => m.n <= 150 && m.color === '#1e3a8a' && m.weight === 4 && m.pane === 'npfQ400TracePane') && c.trace.pointsDessines < c.trace.pointsTraceC / 3],
+    ['C : trace — arrêt brutal : trace retrouvée au relancement, close, avec message clair', !!c.trace && !!c.trace.repriseC && c.trace.repriseC.etat === 'retrouvée' && c.trace.repriseC.points === 3720 && /retrouvée après un arrêt brutal/.test(c.trace.messageReprise) && c.trace.enregistrementApresReprise === false],
+    ['C : trace — relancement en plein vol : la trace continue et son trait est redessiné', !!c.trace && c.trace.volD_demarre && c.trace.volD_continue && c.trace.volD_traitRedessine && c.trace.volD_arrete],
+    ['C : trace — GPX 1.1 valide (lat, lon, altitude, heure UTC, vitesse), un segment par trou, nom NPF-Q400_trace_AAAA-MM-JJ_HHMMZ.gpx', !!c.trace && !!c.trace.gpx && c.trace.gpx.xmlValide && c.trace.gpx.racine === 'gpx' && c.trace.gpx.version === '1.1' && c.trace.gpx.espace === 'http://www.topografix.com/GPX/1/1' && c.trace.gpx.trkpt === 1341 && c.trace.gpx.ele === 1341 && c.trace.gpx.vitesse === 1341 && c.trace.gpx.trkseg === 2 && /Z$/.test(c.trace.gpx.premiereHeure) && c.trace.gpx.nom === c.trace.gpx.nomAttendu && /^NPF-Q400_trace_\d{4}-\d{2}-\d{2}_\d{4}Z\.gpx$/.test(c.trace.gpx.nom)],
+    ['C : trace — « Exporter (GPX) » passe par la fenêtre de partage', !!c.trace && c.trace.gpxPartage === c.trace.gpx.nom],
+    ['C : trace — « Afficher » une trace passée ; liste (date, heure UTC, durée) avec Afficher / Exporter (GPX)', !!c.trace && !!c.trace.afficher && c.trace.afficher.pointsDessines > 50 && c.trace.liste.lignes >= 4 && /\d\d\/\d\d\/\d{4} · \d\d:\d\dZ · /.test(c.trace.liste.texte) && c.trace.liste.boutons.indexOf('Afficher') >= 0 && c.trace.liste.boutons.indexOf('Exporter (GPX)') >= 0],
+    ['C : trace — lignes « Trace » dans l\'export DIAG (état, points, dernier point, trous)', !!c.trace && c.trace.diag.some(l => /^Trace : /.test(l)) && c.trace.diag.some(l => /NPF-Q400 APP — TRACE/.test(l)) && c.trace.diag.some(l => /dernier point reçu/.test(l)) && c.trace.diag.some(l => /trou de 46 s/.test(l))],
+    ['C : partage iPad — DIAG, KML et CSV feu passent par la fenêtre de partage', !!c.trace && /^POINT_TEST\.kml \| contenu POINT_TEST\.kml$/.test(c.trace.partageKml || '') && /^Fichier_cibles_NEXT_TEST\.csv \| /.test(c.trace.partageCsv || '') && c.trace.partageDiag === 'NPF_DIAG_2026-11-17_10-00.txt' && c.trace.canShareDiag === true],
     ['C : rapport de démarrage écrit', !!(c.npfQ400AppFin && c.npfQ400AppFin.startupReport && c.npfQ400AppFin.startupReport.carte === true)]
 ];
 let ok = true;

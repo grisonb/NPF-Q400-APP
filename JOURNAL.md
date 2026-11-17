@@ -5,6 +5,123 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 17/11/2026 — v0.5 : enregistrement automatique de la trace de vol
+
+Base inchangée : NPF-Q400 TEST v17.97 (`web-test/` identique). Version 0.5 (build 5), tous les
+numéros changés ensemble.
+
+### Natif
+- Plugins : `@capgo/background-geolocation` 8.6.4 (trace, arrière-plan), `@capacitor/share` 8.0.3,
+  `@capacitor/filesystem` 8.1.5 (fichiers à partager). `Info.plist` : texte « Toujours »
+  (`NSLocationAlwaysAndWhenInUseUsageDescription`, en français), mode arrière-plan `location`.
+- **Type d'activité « avion »** : le plugin ne permet pas de le régler → correctif d'une ligne
+  (`patches/@capgo+background-geolocation+8.6.4.patch`, option `activityType: 'airborne'`),
+  appliqué automatiquement à chaque `npm ci` par `patch-package` (script `postinstall`).
+  Pause automatique d'iOS : déjà désactivée par le plugin. Précision : la meilleure d'iOS
+  (« navigation » si l'iPad est branché).
+
+### Architecture (décision)
+- **Deux flux GPS séparés** : la carte garde exactement le GPS de la 0.4 (`@capacitor/geolocation`,
+  cap = route, ≈ 1 position/s, contrôles 0.4 inchangés et verts) ; la trace utilise le plugin
+  d'arrière-plan, lancé dès l'ouverture de l'app (il doit tourner avant le décollage pour
+  démarrer seul à 50 kt, même écran verrouillé). Un seul flux aurait obligé à changer le GPS
+  de la carte.
+- Chaque position de la trace est aussi écrite par iOS dans le **journal natif** du plugin
+  (fichier). Au retour au premier plan, toutes les 30 s et au relancement, les points absents
+  de la page y sont repris dans l'ordre, puis le journal est vidé jusqu'au dernier point lu.
+  Rien n'est perdu si iOS endort ou ferme la page en arrière-plan.
+- Fichier séparé `app-layer/npf-q400-app-trace.js`, chargé juste après la couche app, inactif
+  hors de l'app.
+
+### Démarrage / arrêt automatiques (réglages par défaut, tous modifiables)
+- Démarrage : vitesse ≥ 50 kt pendant 30 s. La trace commence 2 min AVANT le moment où la
+  vitesse a dépassé 50 kt (mémoire tampon tournante ; décision : avant le début de la course
+  au décollage plutôt qu'avant l'instant de détection).
+- Arrêt : vitesse < 30 kt pendant 2 min (la trace garde ces 2 min). Une remise de gaz ou un
+  écopage restent au-dessus de 30 kt : pas d'arrêt. Une escale (posé > 2 min) : arrêt, nouvelle
+  trace au décollage suivant.
+- Vitesse calculée à partir des positions si le GPS ne la donne pas.
+- Décisions prises seul :
+  - démarrage à la main : la trace commence à l'appui (sans minutes d'avant) ; l'arrêt
+    automatique ne s'applique qu'après un passage au-dessus de la vitesse de démarrage (une
+    trace lancée au sol ne s'arrête pas toute seule au roulage) ;
+  - arrêt à la main en vol : pas de redémarrage automatique avant un atterrissage (vitesse
+    < 30 kt pendant 2 min), sinon la trace repartirait 30 s plus tard ;
+  - trace démarrée puis arrêtée sans aucun point : supprimée (pas de ligne vide) ;
+  - bouton « Supprimer » (avec confirmation) dans la liste des traces, non demandé, pour que
+    l'iPad ne se remplisse pas (≈ 1 Mo par heure de vol).
+
+### Interface (dans l'app seulement)
+- Bouton TRACE : n'ouvre plus Raccourcis. Gris = arrêté, rouge (clignotement doux) =
+  enregistrement. Appui court : démarrer, ou arrêter après confirmation. Appui long (0,65 s) :
+  « Réglages Trace ».
+- « Réglages Trace » : vitesse de démarrage (kt), durée avant démarrage (s), vitesse d'arrêt (kt),
+  durée avant arrêt (min), minutes d'avant gardées, couleur du trait (7 couleurs, défaut bleu
+  foncé ; ni rouge ni jaune), épaisseur (défaut 4 px), aperçu, « Valeurs par défaut ».
+  Mémorisés (`localStorage`, clé `npfQ400AppTraceReglagesV1`).
+- Trait de la trace en cours : calque sous la ligne rouge et le vecteur jaune ; un point dessiné
+  si > 15 m ET (5 s ou virage > 8°) ; morceaux de 150 points (un nouveau point ne redessine que
+  le dernier morceau).
+- Traces passées : section « Traces de vol (NPF-Q400 APP) » dans « Gestion des Cartes » (bouton
+  Cartes) — date, heure UTC de début, durée, points, trous ; « Afficher », « Exporter (GPX) »,
+  « Supprimer » ; bouton « Réglages Trace ».
+- GPX 1.1 `NPF-Q400_trace_AAAA-MM-JJ_HHMMZ.gpx` : latitude, longitude, altitude (si valide),
+  heure UTC, vitesse et route en extension Garmin `TrackPointExtension` v2 (GPX 1.1 n'a pas de
+  champ vitesse : décision) ; un segment par trou de plus de 30 s. Partage iPad (Fichiers,
+  AirDrop, Mail).
+- Partage iPad aussi pour les fichiers DIAG (`NPF_DIAG_*.txt`), KML et CSV feu de la PWA ; les
+  autres partages de la PWA (BLOC/FUEL…) ne changent pas.
+
+### Sécurité des données
+- IndexedDB `npfQ400AppTracesV1` : fiche de trace + lots de points ; un lot au plus tard toutes
+  les 25 s d'enregistrement (filet : toutes les 15 s), et à chaque passage en arrière-plan.
+- Arrêt brutal : au relancement, la trace « en cours » est relue, complétée par le journal natif ;
+  si son dernier point a moins de (durée d'arrêt + 5 min), elle **continue** ; sinon elle est
+  close comme « retrouvée ». Message clair dans les deux cas.
+- Trous de plus de 30 s : comptés, listés, dans le DIAG, dans la liste et dans le GPX.
+- DIAG : section « NPF-Q400 APP — TRACE » à la fin de l'export (état, points reçus, dernier
+  point, trace en cours, trous, dernier lot, dernière trace, réglages) + repères horodatés
+  (démarrage, arrêt, trous, reprises du journal).
+
+### Essais PC (`npm run test:web`) — 51 contrôles sur 51 OK
+- Navigateur normal : identique à TEST v17.97 (bouton TRACE de TEST, pas de liste, DIAG et
+  téléchargements intacts) ; GPS de la carte : tous les contrôles de la 0.4 verts.
+- Mode app simulé, positions datées injectées :
+  - réglages : appui long, valeurs par défaut, modification mémorisée, « Valeurs par défaut » ;
+  - bouton : Raccourcis jamais lancé ; démarrage à la main (rouge) ; arrêt avec confirmation (gris) ;
+  - vol complet (roulage 10 kt, 120 kt, remise de gaz 40 kt, écopage 75 kt, 300 s sans vitesse
+    GPS, trou de 45 s, atterrissage 15 kt) : 1 trace, début exactement 2 min avant le passage à
+    50 kt, fin 2 min après le passage sous 30 kt, 1 341 points, 1 trou, 300 vitesses calculées ;
+  - arrêt à la main en vol : pas de redémarrage avant l'atterrissage, puis redémarrage et arrêt ;
+  - mémoire : tampon ≈ 160 points après 30 min de roulage ; ≤ 7 points en attente ; 0,006 à
+    0,02 ms par point ; 1 h de vol (3 720 points) = 144 lots, 748 points dessinés en 5 morceaux ;
+  - arrêt brutal (20 points en attente perdus) : trace retrouvée et close avec 3 720 points et
+    message ; relancement en plein vol : la trace continue et son trait est redessiné ;
+  - GPX : XML valide, 1.1, 1 341 points avec altitude, heure UTC et vitesse, 2 segments, nom
+    attendu ; « Exporter (GPX) » passe par la fenêtre de partage ;
+  - Afficher une trace passée ; liste ; lignes « Trace » du DIAG ; partage DIAG / KML / CSV.
+
+### Recette simulateur (déclenchée par le passage 0.4 → 0.5)
+- Par orientation (paysage puis portrait), en ligne droite au cap 330° depuis Marignane :
+  parking 30 s, roulage 5 m/s (≈ 10 kt) 40 s, vol 70 m/s (≈ 136 kt), app en arrière-plan
+  60 s (Réglages d'iOS au premier plan), retour, ralentissement 12 m/s (≈ 23 kt) 150 s, arrêt.
+- Ordres d'essai (fabrication Debug seulement) par `Documents/npfq400-essai.json` : cadrer la
+  trace, Réglages Trace, liste, écrire le GPX dans Documents, exporter.
+- Bilan : démarrage / arrêt avec l'heure relative, lots, reprises du journal, points du GPX
+  pendant l'arrière-plan et plus grand écart, XML du GPX (`xmllint`).
+- Captures : 10 s, 25 s, vol (bouton rouge, trait), arrière-plan, retour, trace terminée,
+  Réglages Trace, liste des traces, fenêtre de partage du GPX. Durée prévue : ≈ 7 min par
+  orientation (limite du travail portée à 100 min).
+
+### Non vérifiable sans iPad réel
+- Comportement réel d'iOS en vol : écran verrouillé longtemps, iPad chaud, batterie, coupure
+  par iOS ; première demande d'autorisation (iOS propose d'abord « Pendant l'utilisation » ;
+  avec le mode arrière-plan, la trace continue quand même tant que l'app a été ouverte) ;
+  « Autoriser une fois » couperait la trace à la fermeture de l'app.
+- Fenêtre de partage réelle (Fichiers, AirDrop, Mail) et ouverture du GPX dans d'autres apps.
+
+---
+
 ## 16/11/2026 — v0.4 : résultats GitHub et recette simulateur plus robuste
 
 ### Runs du commit `edde0de` (GPS natif, appartient à la 0.4)

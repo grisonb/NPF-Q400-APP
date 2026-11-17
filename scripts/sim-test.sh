@@ -113,17 +113,13 @@ for ORIENT in paysage portrait; do
   /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PL"
 
   xcrun simctl install "$UDID" "$COPY"
-  # GPS : autorisation accordée d'avance (pas de fenêtre système) et trajet simulé
-  # Marignane -> Salon -> Avignon à 60 m/s (≈ 117 kt), une position par seconde, pour que
-  # la vitesse et la route (cap) soient connues. Repli : position fixe à Marignane.
-  xcrun simctl privacy "$UDID" grant location "$BUNDLE_ID" > /dev/null 2>&1 || say "autorisation GPS d'avance : impossible"
-  if xcrun simctl location "$UDID" start --speed=60 --interval=1 \
-       43.4367,5.2150 43.6064,5.1092 43.9078,4.9017 > "$WORK/location-$ORIENT.log" 2>&1; then
-    say "GPS simulé : trajet Marignane -> Salon -> Avignon, 60 m/s, 1 position par seconde"
-  else
-    say "GPS simulé : trajet impossible ($(head -1 "$WORK/location-$ORIENT.log")) -> position fixe"
-    xcrun simctl location "$UDID" set 43.4367,5.2150 > /dev/null 2>&1 || say "position simulée : impossible"
-  fi
+  # GPS : autorisation « Toujours » accordée d'avance (pas de fenêtre système), position
+  # fixe au parking de Marignane au lancement.
+  xcrun simctl privacy "$UDID" grant location-always "$BUNDLE_ID" > /dev/null 2>&1 \
+    || xcrun simctl privacy "$UDID" grant location "$BUNDLE_ID" > /dev/null 2>&1 \
+    || say "autorisation GPS d'avance : impossible"
+  P0="43.4380,5.2120"
+  xcrun simctl location "$UDID" set "$P0" > /dev/null 2>&1 || say "position simulée : impossible"
   CONSOLE="$OUT/console-app-$ORIENT.log"
   app_running() { xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID"; }
   # Lancement, vérifié : sur un Mac GitHub très chargé, « simctl launch » peut rester
@@ -147,27 +143,120 @@ for ORIENT in paysage portrait; do
     kill "$LAUNCH_PID" > /dev/null 2>&1 || true
     sleep 3
   done
-  for at in 10 25 40; do
-    while [ $(( $(date +%s) - T0 )) -lt "$at" ]; do sleep 1; done
-    SHOT="$OUT/capture-$ORIENT-${at}s.png"
-    xcrun simctl io "$UDID" screenshot "$SHOT" > /dev/null 2>&1
-    if [ "$ORIENT" = "paysage" ]; then
-      W=$(sips -g pixelWidth "$SHOT" | awk '/pixelWidth/{print $2}')
-      H=$(sips -g pixelHeight "$SHOT" | awk '/pixelHeight/{print $2}')
-      if [ "$H" -gt "$W" ]; then sips -r 270 "$SHOT" > /dev/null; fi
-    fi
+  DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null || true)
+  mkdir -p "$DATA/Documents" 2>/dev/null || true
+  PHASES="$OUT/phases-$ORIENT.txt"
+  : > "$PHASES"
+  attendre() { while [ $(( $(date +%s) - T0 )) -lt "$1" ]; do sleep 1; done; }
+  phase() { echo "$1 $(date +%s)" >> "$PHASES"; say "t+$(( $(date +%s) - T0 )) s : $2"; }
+  capture() {
+    local SHOT="$OUT/capture-$ORIENT-$1.png"
+    xcrun simctl io "$UDID" screenshot "$SHOT" > /dev/null 2>&1 || { say "capture $1 : impossible"; return; }
+    if [ "$ORIENT" = "paysage" ] && [ "${2:-app}" = "app" ]; then sips -r 90 "$SHOT" > /dev/null 2>&1 || true; fi
     sips -s format bmp --resampleWidth 200 "$SHOT" --out "$WORK/tmp.bmp" > /dev/null 2>&1
-    say "capture ${at} s : $(python3 "$WORK/analyse-capture.py" "$WORK/tmp.bmp")"
-  done
-  if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID"; then
-    say "app toujours lancée après 40 s : oui"
+    say "capture $1 (t+$(( $(date +%s) - T0 )) s) : $(python3 "$WORK/analyse-capture.py" "$WORK/tmp.bmp")"
+  }
+  SEQ=0
+  ordre() {
+    SEQ=$((SEQ + 1))
+    printf '{"seq":%s,"action":"%s"}' "$SEQ" "$1" > "$DATA/Documents/npfq400-essai.json"
+    say "t+$(( $(date +%s) - T0 )) s : ordre d'essai « $1 »"
+  }
+  # Point à DIST mètres de LAT,LON au cap BRG (ligne droite).
+  point() { python3 -c "import math,sys;la,lo=map(float,sys.argv[1].split(','));b=math.radians(float(sys.argv[2]));d=float(sys.argv[3]);print('%.6f,%.6f'%(la+d*math.cos(b)/111320,lo+d*math.sin(b)/(111320*math.cos(math.radians(la)))))" "$1" "$2" "$3"; }
+  BRG=330
+  route() { # route VITESSE_M_S DEPART : ligne droite au cap BRG, 200 km
+    local FIN; FIN=$(point "$2" "$BRG" 200000)
+    xcrun simctl location "$UDID" start --speed="$1" --interval=1 "$2" "$FIN" > "$WORK/location.log" 2>&1 \
+      || say "trajet simulé impossible : $(head -1 "$WORK/location.log")"
+  }
+
+  attendre 10; capture "10s"
+  attendre 25; capture "25s"
+  # roulage 5 m/s (≈ 10 kt)
+  attendre 30; phase roulage "roulage à 5 m/s (≈ 10 kt)"; TS=$(date +%s); route 5 "$P0"
+  # décollage et vol 70 m/s (≈ 136 kt) : la trace doit démarrer ≈ 30 s plus tard
+  attendre 70; P1=$(point "$P0" "$BRG" $(( 5 * ($(date +%s) - TS) ))); phase vol "vol à 70 m/s (≈ 136 kt)"; TS=$(date +%s); route 70 "$P1"
+  attendre 108; ordre cadrer
+  attendre 114; capture "vol-bouton-rouge"
+  # arrière-plan : l'app Réglages d'iOS passe devant pendant 60 s
+  attendre 120; phase arriere-plan "app en arrière-plan (Réglages d'iOS ouverts)"; xcrun simctl launch "$UDID" com.apple.Preferences > /dev/null 2>&1 || say "ouverture de Réglages impossible"
+  attendre 150; capture "arriere-plan" systeme
+  attendre 180; phase premier-plan "retour de l'app au premier plan"; xcrun simctl launch "$UDID" "$BUNDLE_ID" > /dev/null 2>&1 || say "retour de l'app impossible"
+  attendre 188; ordre cadrer
+  attendre 195; capture "retour-premier-plan"
+  # ralentissement 12 m/s (≈ 23 kt) : la trace doit s'arrêter ≈ 2 min plus tard
+  attendre 200; P2=$(point "$P1" "$BRG" $(( 70 * ($(date +%s) - TS) ))); phase ralenti "ralentissement à 12 m/s (≈ 23 kt)"; TS=$(date +%s); route 12 "$P2"
+  attendre 350; P3=$(point "$P2" "$BRG" $(( 12 * ($(date +%s) - TS) ))); phase arret "arrêt (position fixe)"; xcrun simctl location "$UDID" set "$P3" > /dev/null 2>&1
+  attendre 355; ordre afficher-derniere
+  attendre 362; capture "trace-terminee"
+  attendre 366; ordre reglages
+  attendre 373; capture "reglages-trace"
+  attendre 377; ordre fermer
+  attendre 381; ordre liste
+  attendre 390; capture "liste-traces"
+  attendre 394; ordre fermer
+  attendre 398; ordre gpx
+  attendre 406; ordre exporter
+  attendre 414; capture "partage-gpx"
+  if app_running; then say "app toujours lancée à la fin : oui"; else say "app toujours lancée à la fin : NON (arrêt ou plantage ?)"; fi
+
+  # GPX écrit par l'ordre « gpx » dans Documents/npfq400-gpx/
+  GPX=$(ls -t "$DATA"/Documents/npfq400-gpx/*.gpx 2>/dev/null | head -1)
+  if [ -n "$GPX" ]; then
+    cp "$GPX" "$OUT/"
+    if xmllint --noout "$GPX" 2>"$WORK/xmllint.log"; then XMLOK="XML valide"; else XMLOK="XML INVALIDE ($(head -1 "$WORK/xmllint.log"))"; fi
+    say "GPX : $(basename "$GPX") · $XMLOK"
+    python3 - "$GPX" "$PHASES" "$T0" <<'PY' | tee -a "$BILAN"
+import sys, re, datetime
+gpx, phases, t0 = sys.argv[1], sys.argv[2], int(sys.argv[3])
+txt = open(gpx, encoding='utf-8').read()
+times = [datetime.datetime.strptime(m, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()
+         for m in re.findall(r'<trkpt[^>]*>.*?<time>([^<]+)</time>', txt)]
+ph = {}
+for line in open(phases):
+    k, v = line.split(); ph[k] = int(v)
+print('GPX : %d points · %d segment(s) · version 1.1 : %s · vitesse : %s · altitude : %s' % (
+    len(times), txt.count('<trkseg>'), 'oui' if 'version="1.1"' in txt else 'NON',
+    'oui' if 'gpxtpx:speed' in txt else 'non', 'oui' if '<ele>' in txt else 'non'))
+if times:
+    print('GPX : début t+%d s · fin t+%d s (phases : roulage t+%d, vol t+%d, ralenti t+%d, arrêt t+%d)' % (
+        times[0] - t0, times[-1] - t0, ph.get('roulage', 0) - t0, ph.get('vol', 0) - t0, ph.get('ralenti', 0) - t0, ph.get('arret', 0) - t0))
+    a, b = ph.get('arriere-plan'), ph.get('premier-plan')
+    if a and b:
+        n = sum(1 for t in times if a <= t <= b)
+        gaps = [round(times[i + 1] - times[i]) for i in range(len(times) - 1) if a - 5 <= times[i] <= b + 5]
+        print('GPX : %d points pendant les %d s en arrière-plan · plus grand écart pendant ce temps : %s s' % (n, b - a, max(gaps) if gaps else '—'))
+PY
   else
-    say "app toujours lancée après 40 s : NON (arrêt ou plantage ?)"
+    say "GPX : AUCUN fichier trouvé dans Documents/npfq400-gpx"
   fi
   kill "$LAUNCH_PID" > /dev/null 2>&1 || true
-  xcrun simctl spawn "$UDID" log show --last 3m --style compact \
+  xcrun simctl spawn "$UDID" log show --last 10m --style compact \
     --predicate 'process == "App"' > "$OUT/journal-systeme-$ORIENT.log" 2>&1 || true
 
+  say "--- trace ($ORIENT)"
+  python3 - "$CONSOLE" "$T0" <<'PY' | tee -a "$BILAN"
+import sys, json
+console, t0 = sys.argv[1], int(sys.argv[2]) * 1000
+ev = []
+for line in open(console, errors='replace'):
+    i = line.find('[NPF-Q400 APP] trace ')
+    if i < 0: continue
+    try: ev.append(json.loads(line[i + len('[NPF-Q400 APP] trace '):].strip()))
+    except Exception: pass
+def rel(t): return '%+d s' % round((t - t0) / 1000)
+lots = [e for e in ev if e.get('evt') == 'lot']
+for e in ev:
+    k = e.get('evt')
+    if k in ('source-active', 'source-erreur', 'pret', 'demarrage', 'arret', 'trou', 'rattrapage', 'arriere-plan', 'premier-plan', 'gpx-ecrit', 'partage', 'erreur-sauvegarde', 'erreur-demarrage', 'reprise'):
+        d = {x: y for x, y in e.items() if x not in ('evt', 't')}
+        for key in ('debut', 'fin', 'de', 'a'):
+            if key in d and isinstance(d[key], (int, float)): d[key] = rel(d[key])
+        print('trace t%s : %s %s' % (rel(e['t']), k, json.dumps(d, ensure_ascii=False)))
+print('trace : %d lots enregistrés · plus grand écart entre deux lots : %s s' % (
+    len(lots), max([round((lots[i + 1]['t'] - lots[i]['t']) / 1000) for i in range(len(lots) - 1)] or ['—'])))
+PY
   say "--- messages de la page ($ORIENT)"
   grep -E "\[NPF-Q400 APP\] rapport" "$CONSOLE" | tail -1 | sed 's/^.*\[NPF-Q400 APP\] rapport /rapport : /' | tee -a "$BILAN" || true
   RAPPORT=$(grep -E "\[NPF-Q400 APP\] rapport" "$CONSOLE" | tail -1 | sed 's/^.*\[NPF-Q400 APP\] rapport //')
@@ -188,10 +277,10 @@ else:
     print("contrôle GPS : %s" % c)
 ' | tee -a "$BILAN" || true
   fi
-  if grep -q "NSLocationWhenInUseUsageDescription" "$CONSOLE"; then
-    say "GPS : iOS signale le texte d'autorisation de position ABSENT"
+  if grep -qE "NSLocation(WhenInUse|AlwaysAndWhenInUse)UsageDescription" "$CONSOLE"; then
+    say "GPS : iOS signale un texte d'autorisation de position ABSENT"
   else
-    say "GPS : pas d'alerte iOS sur le texte d'autorisation de position"
+    say "GPS : pas d'alerte iOS sur les textes d'autorisation de position (pendant l'utilisation / toujours)"
   fi
   ERRS=$(grep -E "ERROR MESSAGE|\[error\]|erreur JS|js.error|SyntaxError|TypeError|ReferenceError" "$CONSOLE" | sort | uniq -c | sort -rn)
   if [ -n "$ERRS" ]; then

@@ -207,6 +207,229 @@
                 info.pdfTerrain = await testPdf('terrain');
 
                 step('fin');
+                step('trace');
+                info.traceNavigateur = {
+                    module: !!(window.NPF_Q400_APP && window.NPF_Q400_APP.trace),
+                    sectionListe: !!document.getElementById('npfq400-traces-section'),
+                    boutonLieParTest: (document.getElementById('yul-trace-button') || {}).dataset ? document.getElementById('yul-trace-button').dataset.bound : null,
+                    boutonClasses: (document.getElementById('yul-trace-button') || { className: '' }).className,
+                    clicAncreNatif: /\[native code\]/.test(String(HTMLAnchorElement.prototype.click)),
+                    diagSansTrace: typeof window.buildNpfStartupDiagnosticExportText === 'function'
+                        && window.buildNpfStartupDiagnosticExportText().indexOf('NPF-Q400 APP — TRACE') < 0
+                };
+                if (window.NPF_Q400_APP && window.NPF_Q400_APP.trace && window.NPF_Q400_APP.trace.test) {
+                    var TR = window.NPF_Q400_APP.trace, X = TR.test, it = {};
+                    info.trace = it;
+                    try {
+                        var KTMS = 1 / 1.943844;
+                        var gen = function (base, segs) {
+                            var pts = [], t = base, lat = 43.4367, lon = 5.2150;
+                            segs.forEach(function (s) {
+                                for (var i = 0; i < s.d; i++) {
+                                    var mps = s.kt * KTMS, crs = (s.crs === undefined ? 335 : s.crs) * Math.PI / 180;
+                                    lat += mps * Math.cos(crs) / 111320;
+                                    lon += mps * Math.sin(crs) / (111320 * Math.cos(lat * Math.PI / 180));
+                                    if (!s.trou) pts.push({ latitude: lat, longitude: lon, accuracy: 5, altitude: s.kt > 60 ? 600 : 30,
+                                        altitudeAccuracy: 10, speed: s.sansVitesse ? null : mps, bearing: s.kt > 2 ? (s.crs === undefined ? 335 : s.crs) : null, time: t });
+                                    t += 1000;
+                                }
+                            });
+                            return { pts: pts, fin: t };
+                        };
+                        var btn = document.getElementById('yul-trace-button');
+                        var ev = function (type) { btn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1 })); };
+                        var appuyer = async function (ms) {
+                            ev('pointerdown'); await sleep(ms); ev('pointerup');
+                            btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            await sleep(150);
+                        };
+                        var supposeAvant = localStorage.getItem('npfTraceAssumedActive_v1');
+                        var hrefAvant = location.href;
+                        it.etatInitial = TR.etat;
+                        it.sourceInitiale = TR.source;
+                        it.boutonInitial = btn.className;
+
+                        /* 1. Réglages : appui long */
+                        await appuyer(800);
+                        var w = document.getElementById('npfq400-trace-reglages');
+                        it.reglagesOuverts = !!w;
+                        var val = function (id) { return Number(document.getElementById(id).value); };
+                        it.reglagesDefaut = w ? [val('npfq400-r-vd'), val('npfq400-r-dd'), val('npfq400-r-va'), val('npfq400-r-da'), val('npfq400-r-ma'), val('npfq400-r-ep')] : null;
+                        it.paletteCouleurs = w ? w.querySelectorAll('.npfq400-couleur').length : 0;
+                        it.couleurChoisieDefaut = w ? (w.querySelector('.npfq400-couleur.npfq400-choisie') || {}).getAttribute('data-c') : null;
+                        if (w) {
+                            document.getElementById('npfq400-r-vd').value = 60;
+                            document.getElementById('npfq400-r-ep').value = 6;
+                            w.querySelector('.npfq400-couleur[data-c="#6d28d9"]').click();
+                            document.getElementById('npfq400-r-ok').click();
+                        }
+                        it.reglagesApres = JSON.parse(localStorage.getItem('npfQ400AppTraceReglagesV1') || 'null');
+                        await appuyer(800);
+                        document.getElementById('npfq400-r-defaut').click();
+                        document.getElementById('npfq400-r-ok').click();
+                        it.reglagesRemisDefaut = JSON.parse(localStorage.getItem('npfQ400AppTraceReglagesV1') || 'null');
+                        it.raccourciTestPasLance = localStorage.getItem('npfTraceAssumedActive_v1') === supposeAvant && location.href === hrefAvant;
+
+                        /* 2. Appui court : démarrage à la main, puis arrêt avec confirmation */
+                        var confirmations = 0;
+                        window.confirm = function () { confirmations += 1; return true; };
+                        await appuyer(80);
+                        it.manuelDemarre = TR.enregistrement === true && btn.classList.contains('npfq400-trace-on');
+                        await appuyer(80);
+                        it.manuelArrete = TR.enregistrement === false && btn.classList.contains('npfq400-trace-off') && confirmations === 1;
+                        await X.sauver();
+                        await sleep(300);
+                        it.traceVideSupprimee = (await X.lireTraces()).length === 0;
+
+                        /* 3. Vol complet : roulage 10 kt, décollage, remise de gaz (40 kt 20 s), écopage 75 kt,
+                         *    vitesse absente 300 s (calculée), trou de 45 s, atterrissage 15 kt, arrêt. */
+                        var base = Date.now() - 6 * 3600 * 1000;
+                        var A = gen(base, [
+                            { d: 180, kt: 10 }, { d: 600, kt: 120 }, { d: 20, kt: 40 }, { d: 60, kt: 75 },
+                            { d: 300, kt: 120, sansVitesse: true }, { d: 45, kt: 120, trou: true }, { d: 120, kt: 120 },
+                            { d: 200, kt: 15 }, { d: 60, kt: 0 }
+                        ]);
+                        var t0 = performance.now();
+                        X.injecter(A.pts);
+                        it.msParPoint = Math.round((performance.now() - t0) / A.pts.length * 1000) / 1000;
+                        await X.sauver();
+                        await sleep(300);
+                        var traces = await X.lireTraces();
+                        var trA = traces.filter(function (t) { return t.debut >= base; }).sort(function (a, b) { return a.debut - b.debut; })[0];
+                        it.volA = trA ? {
+                            etat: trA.etat, mode: trA.mode, points: trA.points, trous: trA.trous.length,
+                            debutApresBase_s: Math.round((trA.debut - base) / 1000),
+                            finApresBase_s: Math.round((trA.fin - base) / 1000),
+                            une: traces.filter(function (t) { return t.debut >= base && t.debut < A.fin; }).length
+                        } : null;
+                        var pA = trA ? await X.lirePoints(trA.id) : { pts: [] };
+                        it.volA_pointsLus = pA.pts.length;
+                        it.volA_vitesseCalculee = pA.pts.filter(function (q) { return q[7] === 1; }).length;
+                        it.volA_capRoute = pA.pts.filter(function (q) { return q[5] === 335; }).length;
+
+                        /* 4. Arrêt à la main en vol : pas de redémarrage avant l'atterrissage */
+                        var b2 = A.fin + 600000;
+                        var B1 = gen(b2, [{ d: 60, kt: 10 }, { d: 200, kt: 120 }]);
+                        X.injecter(B1.pts);
+                        it.volB_demarre = TR.enregistrement === true;
+                        await appuyer(80); /* arrêt à la main (confirmation acceptée) */
+                        var B2 = gen(B1.fin, [{ d: 120, kt: 120 }]);
+                        X.injecter(B2.pts);
+                        it.volB_pasRedemarreEnVol = TR.enregistrement === false;
+                        var B3 = gen(B2.fin, [{ d: 150, kt: 15 }, { d: 20, kt: 10 }, { d: 60, kt: 120 }]);
+                        X.injecter(B3.pts);
+                        it.volB_redemarreApresAtterrissage = TR.enregistrement === true;
+                        var B4 = gen(B3.fin, [{ d: 150, kt: 10 }]);
+                        X.injecter(B4.pts);
+                        it.volB_arreteAuto = TR.enregistrement === false;
+                        await X.sauver();
+
+                        /* 5. Mémoire bornée : 30 min de roulage armé (tampon), puis 1 h de vol */
+                        var b5 = B4.fin + 600000;
+                        var C1 = gen(b5, [{ d: 1800, kt: 8 }]);
+                        X.injecter(C1.pts);
+                        it.tamponApresRoulage = X.moteur.tampon.length;
+                        var C2 = gen(C1.fin, [{ d: 3600, kt: 130 }]);
+                        var t1 = performance.now();
+                        X.injecter(C2.pts);
+                        it.msParPointVol1h = Math.round((performance.now() - t1) / C2.pts.length * 1000) / 1000;
+                        it.enAttenteMax = X.moteur.attente.length;
+                        it.morceauxTrait = X.traitMorceaux();
+                        it.pointsDessines = it.morceauxTrait.reduce(function (s, m) { return s + m.n; }, 0);
+                        it.pointsTraceC = TR.traceEnCours ? TR.traceEnCours.points : null;
+                        await X.sauver();
+                        await sleep(300);
+                        var lotsC = await (async function () {
+                            var tc = TR.traceEnCours;
+                            var r = await X.lirePoints(tc.id);
+                            return { points: r.pts.length, lots: r.dernierSeq + 1 };
+                        })();
+                        it.lotsC = lotsC;
+
+                        /* 6. Arrêt brutal pendant le vol C (points en attente perdus), puis relancement :
+                         *    la trace est retrouvée et close (dernier point trop ancien), avec un message. */
+                        var idC = TR.traceEnCours ? TR.traceEnCours.id : null;
+                        var C3 = gen(C2.fin, [{ d: 20, kt: 130 }]);
+                        X.injecter(C3.pts);
+                        it.perdusArretBrutal = X.arretBrutal();
+                        await X.relancer();
+                        await sleep(300);
+                        var tracesR = await X.lireTraces();
+                        var trC = tracesR.filter(function (t) { return t.id === idC; })[0];
+                        it.repriseC = trC ? { etat: trC.etat, points: trC.points } : null;
+                        it.messageReprise = (TR.messages[TR.messages.length - 1] || {}).texte || '';
+                        it.enregistrementApresReprise = TR.enregistrement;
+
+                        /* 7. Relancement pendant un vol récent : la trace continue */
+                        var b7 = Date.now() - 100000;
+                        var D = gen(b7, [{ d: 20, kt: 10 }, { d: 80, kt: 120 }]);
+                        X.injecter(D.pts);
+                        it.volD_demarre = TR.enregistrement === true;
+                        await X.sauver();
+                        await X.relancer();
+                        it.volD_continue = TR.enregistrement === true && (TR.messages[TR.messages.length - 1] || {}).texte.indexOf('continue') >= 0;
+                        it.volD_traitRedessine = X.traitMorceaux().length > 0;
+                        await appuyer(80);
+                        it.volD_arrete = TR.enregistrement === false;
+                        await X.sauver();
+
+                        /* 8. GPX du vol A */
+                        var g = await X.gpx(trA.id);
+                        var doc = new DOMParser().parseFromString(g.texte, 'application/xml');
+                        var racine = doc.documentElement;
+                        it.gpx = {
+                            nom: g.nom,
+                            xmlValide: !doc.getElementsByTagName('parsererror').length,
+                            racine: racine.nodeName, version: racine.getAttribute('version'),
+                            espace: racine.namespaceURI,
+                            trkpt: doc.getElementsByTagName('trkpt').length,
+                            trkseg: doc.getElementsByTagName('trkseg').length,
+                            ele: doc.getElementsByTagName('ele').length,
+                            time: doc.getElementsByTagName('time').length,
+                            vitesse: doc.getElementsByTagNameNS('http://www.garmin.com/xmlschemas/TrackPointExtension/v2', 'speed').length,
+                            premiereHeure: (doc.querySelector('trkpt time') || {}).textContent,
+                            nomAttendu: 'NPF-Q400_trace_' + new Date(trA.debut).toISOString().slice(0, 10) + '_' + new Date(trA.debut).toISOString().slice(11, 13) + new Date(trA.debut).toISOString().slice(14, 16) + 'Z.gpx'
+                        };
+                        await X.exporter(trA.id);
+                        it.gpxPartage = TR.partageSimule ? TR.partageSimule.nom : null;
+
+                        /* 9. Afficher une trace passée, liste dans « Gestion des Cartes » */
+                        await X.afficher(trA.id);
+                        it.afficher = TR.traceAffichee;
+                        X.masquer();
+                        await X.ordre({ action: 'liste' });
+                        await sleep(800);
+                        var lis = document.querySelectorAll('#npfq400-traces-liste .npfq400-trace-item');
+                        it.liste = {
+                            lignes: lis.length,
+                            texte: lis.length ? lis[0].querySelector('.npfq400-trace-info').textContent : '',
+                            boutons: lis.length ? Array.prototype.map.call(lis[0].querySelectorAll('button'), function (b) { return b.textContent; }) : []
+                        };
+                        await X.ordre({ action: 'fermer' });
+
+                        /* 10. DIAG */
+                        var diagTexte = window.buildNpfStartupDiagnosticExportText();
+                        it.diag = diagTexte.split('\n').filter(function (l) { return /^Trace|^Dernière trace|^Réglages Trace|NPF-Q400 APP — TRACE/.test(l); });
+
+                        /* 11. Partage iPad des fichiers DIAG, KML et CSV feu */
+                        var partage = async function (nom, type) {
+                            TR.partageSimule = null;
+                            var a = document.createElement('a');
+                            a.href = URL.createObjectURL(new Blob(['contenu ' + nom], { type: type }));
+                            a.download = nom;
+                            a.click();
+                            await sleep(300);
+                            return TR.partageSimule ? TR.partageSimule.nom + ' | ' + TR.partageSimule.texte : null;
+                        };
+                        it.partageKml = await partage('POINT_TEST.kml', 'application/vnd.google-earth.kml+xml');
+                        it.partageCsv = await partage('Fichier_cibles_NEXT_TEST.csv', 'text/csv');
+                        TR.partageSimule = null;
+                        await navigator.share({ title: 'DIAG', files: [new File(['diag'], 'NPF_DIAG_2026-11-17_10-00.txt', { type: 'text/plain' })] });
+                        it.partageDiag = TR.partageSimule ? TR.partageSimule.nom : null;
+                        it.canShareDiag = navigator.canShare({ files: [new File(['d'], 'NPF_DIAG_x.txt')] });
+                        it.messages = TR.messages.map(function (m) { return m.texte; });
+                    } catch (x) { it.erreur = String(x && (x.stack || x.message) || x).slice(0, 400); }
+                }
                 var hosts = {};
                 performance.getEntriesByType('resource').forEach(function (p) {
                     try { var h = new URL(p.name).hostname; if (h !== '127.0.0.1') hosts[h] = 1; } catch (_) {}

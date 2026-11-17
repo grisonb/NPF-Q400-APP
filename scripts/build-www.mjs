@@ -32,7 +32,8 @@ writeFileSync(layerJs, readFileSync(layerJs, 'utf8').replace('__NPF_Q400_BASE_VE
 const indexPath = join(out, 'index.html');
 const html = readFileSync(indexPath, 'utf8');
 const marker = '<meta charset="UTF-8">';
-const tag = '\n    <script src="app-layer/npf-q400-app.js"></script><!-- NPF-Q400 APP : couche app (ajout de build, absente de NPF-Q400 TEST) -->';
+const tag = '\n    <script src="app-layer/npf-q400-app.js"></script><!-- NPF-Q400 APP : couche app (ajout de build, absente de NPF-Q400 TEST) -->'
+    + '\n    <script src="app-layer/npf-q400-app-trace.js"></script><!-- NPF-Q400 APP : trace de vol (ne fait rien hors de l\'app) -->';
 const at = html.indexOf(marker);
 if (at < 0) throw new Error(`index.html : repère ${marker} introuvable`);
 if (html.includes('app-layer/npf-q400-app.js')) throw new Error('index.html : couche app déjà présente ?');

@@ -62,7 +62,7 @@ jobs:
     needs: version-check
     if: needs.version-check.outputs.run == 'true'
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
       - name: Récupérer la recette d'essai (ce commit)
         uses: actions/checkout@v7

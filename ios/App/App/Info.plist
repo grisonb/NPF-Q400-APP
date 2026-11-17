@@ -43,8 +43,14 @@
       </array>
     </dict>
 	</dict>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>NPF-Q400 APP enregistre la trace de vol même quand l’app est en arrière-plan ou l’écran verrouillé. La trace reste sur l’iPad.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NPF-Q400 APP utilise la position de l’iPad pour afficher l’avion sur la carte et calculer les distances, les caps et les terrains les plus proches.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

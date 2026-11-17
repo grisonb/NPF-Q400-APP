@@ -1,0 +1,19 @@
+diff --git a/node_modules/@capgo/background-geolocation/ios/Sources/CapgoBackgroundGeolocationPlugin/CapgoCapacitorBackgroundGeolocationPlugin.swift b/node_modules/@capgo/background-geolocation/ios/Sources/CapgoBackgroundGeolocationPlugin/CapgoCapacitorBackgroundGeolocationPlugin.swift
+index 3657ea6..0130d86 100644
+--- a/node_modules/@capgo/background-geolocation/ios/Sources/CapgoBackgroundGeolocationPlugin/CapgoCapacitorBackgroundGeolocationPlugin.swift
++++ b/node_modules/@capgo/background-geolocation/ios/Sources/CapgoBackgroundGeolocationPlugin/CapgoCapacitorBackgroundGeolocationPlugin.swift
+@@ -192,6 +192,14 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
+         manager.allowsBackgroundLocationUpdates = background
+         manager.showsBackgroundLocationIndicator = background
+         manager.pausesLocationUpdatesAutomatically = false
++        // NPF-Q400 APP : type d'activité réglable (« airborne » = avion).
++        switch call.getString("activityType") {
++        case "airborne": manager.activityType = .airborne
++        case "automotiveNavigation": manager.activityType = .automotiveNavigation
++        case "otherNavigation": manager.activityType = .otherNavigation
++        case "fitness": manager.activityType = .fitness
++        default: manager.activityType = .other
++        }
+     }
+ 
+     private func handlePermissions(_ manager: CLLocationManager, background: Bool) -> Bool {

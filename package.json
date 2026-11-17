@@ -1,21 +1,26 @@
 {
   "name": "npf-q400-app",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "NPF-Q400 APP : la PWA NPF-Q400 TEST emballée dans une app iPad (Capacitor 8, iOS uniquement)",
   "scripts": {
     "build:www": "node scripts/build-www.mjs",
     "sync": "node scripts/build-www.mjs && npx cap sync ios",
-    "test:web": "node scripts/test-web.mjs"
+    "test:web": "node scripts/test-web.mjs",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "8.0.1",
     "@capacitor/core": "8.6.2",
+    "@capacitor/filesystem": "8.1.5",
     "@capacitor/geolocation": "8.2.4",
-    "@capacitor/ios": "8.6.2"
+    "@capacitor/ios": "8.6.2",
+    "@capacitor/share": "8.0.3",
+    "@capgo/background-geolocation": "8.6.4"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.2",
+    "patch-package": "8.0.1",
     "pngjs": "7.0.0"
   }
 }

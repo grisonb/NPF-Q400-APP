@@ -11,7 +11,7 @@ But final : enregistrer la trace de vol automatiquement en arrière-plan.
 - Identifiant d'app : `com.grisonb.npfq400app` — nom affiché : « NPF-Q400 APP ».
 - iPad uniquement (`TARGETED_DEVICE_FAMILY = 2`), 4 orientations (comme la PWA,
   dont le manifest n'impose aucune orientation).
-- Version de l'app : **0.4** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
+- Version de l'app : **0.5** (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` dans
   `project.pbxproj`, `package.json`, `LAYER_VERSION` dans `app-layer/`).
 - Icône de l'app = icône de la PWA (`icons/icon-512x512.png` du manifest), refaite par
   `node scripts/make-icon.mjs` (1024 px, sans transparence).
@@ -27,7 +27,9 @@ simple**. Si quelque chose n'est pas vérifiable, écrire « non vérifié ».
 |---|---|
 | `web-test/` | Copie **figée** de NPF-Q400 TEST (fichiers web). **Ne jamais modifier à la main.** Pour changer de version : nouvelle copie complète depuis un commit poussé de TEST + mise à jour de `VERSION-BASE` + entrée dans `JOURNAL.md`. |
 | `app-layer/npf-q400-app.js` | Couche « app » séparée du code TEST. Ne fait rien hors de l'app. Dans l'app : service worker masqué, fenêtres de mise à jour et bouton MAJ bloqués, marges des barres iPadOS comme la PWA installée, écran allumé (KeepAwake), PDF dans la visionneuse interne, relevé des erreurs JS et rapport de démarrage dans la console. |
-| `scripts/build-www.mjs` | Fabrique `www/` = `web-test/` + `app-layer/` + une ligne `<script>` ajoutée en tête de `<head>` de `index.html`. |
+| `app-layer/npf-q400-app-trace.js` | Trace de vol (0.5) : source `@capgo/background-geolocation` + journal natif, démarrage/arrêt auto, IndexedDB `npfQ400AppTracesV1`, bouton TRACE, Réglages Trace, trait, liste dans « Gestion des Cartes », GPX, partage iPad (GPX, DIAG, KML, CSV feu), DIAG. Inactif hors de l'app. |
+| `patches/` | Correctifs de plugins appliqués par `patch-package` au `npm ci` (`postinstall`) : type d'activité « avion » de `@capgo/background-geolocation`. À refaire à chaque changement de version du plugin. |
+| `scripts/build-www.mjs` | Fabrique `www/` = `web-test/` + `app-layer/` + deux lignes `<script>` (couche app puis trace) ajoutées en tête de `<head>` de `index.html`. |
 | `scripts/test-web.mjs` + `scripts/test-probe.js` | Essais sur PC (Chrome de Windows sans écran, réseau extérieur coupé) : TEST d'origine, page de l'app en navigateur normal, mode app simulé (`?npfq400app-sim=1`, localhost seulement). La sonde n'est injectée que par le serveur d'essai. |
 | `scripts/sim-test.sh` | Essai simulateur iPad sur le Mac GitHub (paysage + portrait, captures, console de l'app). |
 | `scripts/make-icon.mjs` | Icône de l'app depuis l'icône de la PWA. |
@@ -64,6 +66,13 @@ npm run test:web          # essais Chrome sur PC
   vides si invalides ; heure en ms ; haute précision ; `maximumAge` respecté ; un suivi continue après
   un délai dépassé. Toute modification de la section 7 de la couche app doit garder ces contrôles
   (essais PC, contrôle GPS de 14 s en Debug).
+- Trace (0.5) : deux flux GPS séparés — la carte = `@capacitor/geolocation` (0.4, ne pas toucher),
+  la trace = `@capgo/background-geolocation` lancé à l'ouverture de l'app (`activityType: 'airborne'`
+  via le correctif, journal natif `locationLog`). Le moteur travaille sur l'HEURE DES POINTS (pas
+  l'horloge) : les essais PC injectent des positions datées. Ordres d'essai simulateur
+  (`Documents/npfq400-essai.json`) actifs seulement en fabrication Debug (`Capacitor.DEBUG`).
+- Fiabilité en vol : l'enregistrement ne doit jamais ralentir la carte ni faire grossir la mémoire
+  en continu (tampon borné par le temps, lots en IndexedDB, trait allégé par morceaux de 150 points).
 - Numéro de version : changer `package.json`, `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`
   et `LAYER_VERSION` ENSEMBLE, dans le même commit que le changement de l'app (sinon l'essai
   simulateur ne se lance pas et le journal se trompe de version).
