@@ -5,6 +5,57 @@ Statuts : `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REV
 
 ---
 
+## 18/11/2026 — NAS et VPS : l'app (origine capacitor://localhost) autorisée — VALIDÉ (curl + Chrome)
+
+Hors du dépôt : paquets, fichiers du NAS et Caddyfile sont dans le dossier privé
+`/home/gsn/projects/NPF-Q400-APP-prive/` (secrets : jamais dans ce dépôt public). Rien de l'app n'a changé.
+
+### Lecture seule d'abord
+- L'app envoie l'origine `capacitor://localhost`. Pré-vérification (OPTIONS) pour le NAS docs
+  (`Authorization` + JSON), Moyens Nationaux (`X-Global-Link-Session`), carnet (`X-Carnet-Cle`) et
+  le Doc FdF du VPS (`Authorization`). Pas de `Range`. Import GAAR : page cachée (iframe), hors CORS.
+- Avant : VPS = toujours `https://grisonb.github.io` ; NAS docs / Moyens Nationaux = github.io ou
+  l'adresse de RUN (ajout RUN du 23/10 en service, fichiers du NAS identiques à ceux déposés par
+  RUN) ; `get-sofia-notams-all.php` = `*` pour toute origine inconnue (laissé tel quel, décision du
+  18/11) ; `carnet.php` = 403 pour toute origine sauf github.io.
+
+### Changement (ajout d'une origine, rien d'autre)
+- VPS, `/etc/caddy/Caddyfile` : table `map` sur l'origine (capacitor://localhost → sa propre
+  adresse ; tout le reste → `https://grisonb.github.io`) utilisée sur les deux lignes
+  `Access-Control-Allow-Origin` (en-tête général et réponse 401 du Doc FdF ; table répétée dans le
+  bloc 401). `Vary: Origin` y était déjà. Installé le 18/11 par SSH : validation Caddy, sauvegarde
+  `Caddyfile.avant-npf-q400-app-20261118-172516`, rechargement sans coupure. Retour arrière :
+  `retour-arriere.sh` (paquet VPS).
+- NAS : `web/briefing-api/npf-docs-api.php` et `npf-global-link-api.php` (`capacitor://localhost`
+  ajouté à la liste qui contient github.io et RUN) ; `web/carnet-api/carnet.php` (liste github.io +
+  capacitor://localhost, toute autre origine toujours 403). Partis des vrais fichiers du NAS (zip du
+  18/11). Installé par la tâche DSM root « NPF-Q400 APP installer CORS » (désactivée, lancée à la
+  main) : empreintes vérifiées, `php -l`, sauvegarde hors de `web`, propriétaire et droits gardés,
+  `synoacltool -enforce-inherit`. Retour arrière : tâche « NPF-Q400 APP retour arriere CORS ».
+- Journal de la tâche : dossier partagé `homes` > `GSN1` > `npf-q400-app-nas-sauvegardes`, créé
+  par root en droits 700 : **invisible dans File Station** avec le compte GSN1 (« n'existe pas »).
+  Lecture possible par le résultat de la tâche dans le Planificateur (si l'enregistrement des
+  résultats est activé). **À REVOIR** pour une prochaine tâche : rendre le journal lisible.
+
+### Contrôles après installation (18/11, curl sans identifiant + Chrome)
+- github.io : NAS et VPS comme avant (github.io, 200 / 204 / 401 Doc FdF).
+- capacitor://localhost : `capacitor://localhost` partout — NAS docs, Moyens Nationaux, carnet
+  (204), VPS cartes, OACI, RUN, carnet-traces, Doc FdF OPTIONS et **401 sans code**.
+- Origine de RUN : NAS docs / Moyens Nationaux = adresse de RUN (inchangé) ; carnet 403 (inchangé).
+- Origine inconnue : toujours refusée (github.io renvoyé, carnet 403). `Vary: Origin` partout.
+- Chrome (sans saisir de mot de passe) : BFG TEST v5.49, BFG pérenne, NPF-Q400 TEST v17.99,
+  NPF-Q400 pérenne v2026.67, RUN : chargement normal, appels NAS au démarrage en 200, aucune
+  erreur CORS dans la console. Depuis github.io : cartes du VPS 200 lisibles, Doc FdF sans code
+  401 lisible (« Code refusé »), NOTAM du NAS 200.
+- Constat (pas lié au changement) : un GET sans identifiant sur `npf-docs-api.php` ou
+  `npf-global-link-api.php` reçoit un 401 qui est la page d'erreur HTML de nginx (DSM) et non la
+  réponse PHP : sans en-tête CORS, pour toutes les origines. **non vérifié avant** l'installation
+  (ce GET n'avait pas été mesuré) ; le chemin du code concerné n'a pas été modifié.
+- **non vérifié** : appels connectés (FdS, GAAR, Moyens Nationaux, Export Carnet) depuis l'app sur
+  iPad — demandent l'app signée et des identifiants.
+
+---
+
 ## 17/11/2026 — v0.5.2 : résultats GitHub — VALIDÉ (simulateur)
 
 - Fabrication sans signature **verte** (run 44163228950, ≈ 2 min) ; essai simulateur **vert**
