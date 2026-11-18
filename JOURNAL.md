@@ -54,6 +54,24 @@ Hors du dépôt : paquets, fichiers du NAS et Caddyfile sont dans le dossier pri
 - **non vérifié** : appels connectés (FdS, GAAR, Moyens Nationaux, Export Carnet) depuis l'app sur
   iPad — demandent l'app signée et des identifiants.
 
+### 18/11/2026 soir — « Trafic Moyens Nationaux : positions indisponibles (réseau) » sur l'iPad (TEST)
+- Vu sur l'iPad dans NPF-Q400 TEST (github.io) après l'installation NAS. Diagnostic en lecture seule :
+  - original / installé : une seule ligne différente (`'capacitor://localhost'` ajouté) ; pour
+    github.io la réponse est la même qu'avant ;
+  - pré-vérification OPTIONS rejouée (Authorization, X-Global-Link-Session, Content-Type JSON) :
+    204, bonne origine, bons en-têtes et méthodes ; aucun 403 sur les 3 fichiers (droits OK) ;
+  - « (réseau) » = réponse illisible pour le navigateur : le PHP répond 401 quand la session
+    Moyens Nationaux est absente, expirée ou refusée par le service distant, et le NAS (Synology)
+    remplace ce 401 par sa page HTML sans CORS. Comportement ancien : même 401 HTML sur un fichier
+    non modifié (`get-cncasc-fdf.php`) et documenté dans `auth-cncasc.php` (BFG) ;
+  - TEST n'efface sa session que sur un 401 lisible : il garde donc une session morte et répète
+    « réseau ». Aucun bouton de déconnexion (appui long = « Afficher trafics non actifs » seulement).
+- **Confirmé par Bastien** : dans Chrome sur le PC (github.io, nouvelle connexion), les positions
+  s'affichent. **Pas causé par notre changement** ; pas de retour arrière.
+- iPad : nouvelle connexion possible après minuit (heure de Paris), bouton OFF puis ON → nouveau code.
+- **À DÉCIDER** (hors de ce projet) : TEST devrait proposer une nouvelle connexion quand les positions
+  restent illisibles, ou le NAS répondre 200 avec l'erreur en JSON (comme `auth-cncasc.php` de BFG).
+
 ---
 
 ## 17/11/2026 — v0.5.2 : résultats GitHub — VALIDÉ (simulateur)
